@@ -46,10 +46,10 @@ MPPTaskPtr MPPTaskManager::findTaskWithTimeout(const mpp::TaskMeta & meta, std::
         {
             return false;
         }
-        else if (query_it->second->to_be_cancelled)
+        else if (query_it->second->to_be_aborted)
         {
-            /// if the query is cancelled, return true to stop waiting timeout.
-            LOG_WARNING(log, fmt::format("Query {} is cancelled, all its tasks are invalid.", id.start_ts));
+            /// if the query is aborted, return true to stop waiting timeout.
+            LOG_WARNING(log, fmt::format("Query {} is aborted, all its tasks are invalid.", id.start_ts));
             cancelled = true;
             return true;
         }
@@ -70,41 +70,41 @@ MPPTaskPtr MPPTaskManager::findTaskWithTimeout(const mpp::TaskMeta & meta, std::
     return it->second;
 }
 
-void MPPTaskManager::cancelMPPQuery(UInt64 query_id, const String & reason)
+void MPPTaskManager::abortMPPQuery(UInt64 query_id, const String & reason, AbortType abort_type)
 {
+    LOG_WARNING(log, fmt::format("Begin to abort query: {}, abort type: {}", query_id, abortTypeToString(abort_type)));
     MPPQueryTaskSetPtr task_set;
     {
-        /// cancel task may take a long time, so first
-        /// set a flag, so we can cancel task one by
+        /// abort task may take a long time, so first
+        /// set a flag, so we can abort task one by
         /// one without holding the lock
         std::lock_guard lock(mu);
         auto it = mpp_query_map.find(query_id);
         if (it == mpp_query_map.end())
         {
-            LOG_WARNING(log, fmt::format("{} does not found in task manager, skip cancel", query_id));
+            LOG_WARNING(log, fmt::format("{} does not found in task manager, skip abort", query_id));
             return;
         }
-        else if (it->second->to_be_cancelled)
+        else if (it->second->to_be_aborted)
         {
-            LOG_WARNING(log, fmt::format("{} already in cancel process, skip cancel", query_id));
+            LOG_WARNING(log, fmt::format("{} already in abort process, skip abort", query_id));
             return;
         }
-        it->second->to_be_cancelled = true;
+        it->second->to_be_aborted = true;
         task_set = it->second;
         scheduler->deleteQuery(query_id, *this, true);
         cv.notify_all();
     }
-    LOG_WARNING(log, fmt::format("Begin cancel query: {}", query_id));
     FmtBuffer fmt_buf;
     fmt_buf.fmtAppend("Remaining task in query {} are: ", query_id);
-    // TODO: cancel tasks in order rather than issuing so many threads to cancel tasks
+    // TODO: abort tasks in order rather than issuing so many threads to cancel tasks
     auto thread_manager = newThreadManager();
     for (auto it = task_set->task_map.begin(); it != task_set->task_map.end();)
     {
         fmt_buf.fmtAppend("{} ", it->first.toString());
         auto current_task = it->second;
         it = task_set->task_map.erase(it);
-        thread_manager->schedule(false, "CancelMPPTask", [task = std::move(current_task), &reason] { task->cancel(reason); });
+        thread_manager->schedule(false, "AbortMPPTask", [task = std::move(current_task), &reason, abort_type] { task->abort(reason, abort_type); });
     }
     LOG_WARNING(log, fmt_buf.toString());
     thread_manager->wait();
@@ -115,14 +115,14 @@ void MPPTaskManager::cancelMPPQuery(UInt64 query_id, const String & reason)
         if (it != mpp_query_map.end())
             mpp_query_map.erase(it);
     }
-    LOG_WARNING(log, "Finish cancel query: " + std::to_string(query_id));
+    LOG_WARNING(log, "Finish abort query: " + std::to_string(query_id));
 }
 
 bool MPPTaskManager::registerTask(MPPTaskPtr task)
 {
     std::unique_lock lock(mu);
     const auto & it = mpp_query_map.find(task->id.start_ts);
-    if (it != mpp_query_map.end() && it->second->to_be_cancelled)
+    if (it != mpp_query_map.end() && it->second->to_be_aborted)
     {
         LOG_WARNING(log, "Do not register task: " + task->id.toString() + " because the query is to be cancelled.");
         cv.notify_all();
@@ -147,11 +147,11 @@ bool MPPTaskManager::registerTask(MPPTaskPtr task)
     return true;
 }
 
-bool MPPTaskManager::isQueryToBeCancelled(UInt64 query_id)
+bool MPPTaskManager::isQueryToBeAborted(UInt64 query_id)
 {
     std::unique_lock lock(mu);
     auto it = mpp_query_map.find(query_id);
-    return it != mpp_query_map.end() && it->second->to_be_cancelled;
+    return it != mpp_query_map.end() && it->second->to_be_aborted;
 }
 
 void MPPTaskManager::unregisterTask(MPPTask * task)
@@ -160,7 +160,7 @@ void MPPTaskManager::unregisterTask(MPPTask * task)
     auto it = mpp_query_map.find(task->id.start_ts);
     if (it != mpp_query_map.end())
     {
-        if (it->second->to_be_cancelled)
+        if (it->second->to_be_aborted)
             return;
         auto task_it = it->second->task_map.find(task->id);
         if (task_it != it->second->task_map.end())
@@ -194,7 +194,7 @@ std::vector<MPPTaskPtr> MPPTaskManager::getCurrentTasksForQuery(UInt64 query_id)
     std::vector<MPPTaskPtr> ret;
     std::lock_guard lock(mu);
     const auto & it = mpp_query_map.find(query_id);
-    if (it == mpp_query_map.end() || it->second->to_be_cancelled)
+    if (it == mpp_query_map.end() || it->second->to_be_aborted)
         return ret;
     for (const auto & task_it : it->second->task_map)
         ret.push_back(task_it.second);

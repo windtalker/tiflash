@@ -54,6 +54,21 @@ extern const char force_no_local_region_for_mpp_task[];
 extern const char random_task_lifecycle_failpoint[];
 } // namespace FailPoints
 
+String abortTypeToString(AbortType abort_type)
+{
+    String ret;
+    switch (abort_type)
+    {
+    case AbortType::ONCANCELLATION:
+        ret = "ONCANCELLATION";
+        break;
+    case AbortType::ONERROR:
+        ret = "ONERROR";
+        break;
+    }
+    return ret;
+}
+
 MPPTask::MPPTask(const mpp::TaskMeta & meta_, const ContextPtr & context_)
     : context(context_)
     , meta(meta_)
@@ -437,24 +452,25 @@ void MPPTask::runImpl()
 void MPPTask::handleError(const String & error_msg)
 {
     auto * manager_ptr = manager.load();
-    /// if manager_ptr is not nullptr, it means the task has already been registered,
-    /// MPPTaskManager::cancelMPPQuery will handle it properly if the query is to be cancelled.
-    if (manager_ptr == nullptr || !manager_ptr->isQueryToBeCancelled(id.start_ts))
+    if (manager_ptr != nullptr)
+        /// task already been registered in TaskManager, use task manager to abort the whole query in this node
+        newThreadManager()->scheduleThenDetach(true, "MPPTaskManagerAbortQuery", [manager_ptr, error_msg, query_id = id.start_ts] { manager_ptr->abortMPPQuery(query_id, error_msg, AbortType::ONERROR); });
+    if (manager_ptr == nullptr || !manager_ptr->isQueryToBeAborted(id.start_ts))
+        /// even when manager_ptr is not nullptr, still need to call the abort because if we return directly, then there is no guarantee that MPPTaskManager::abortMPPQuery
+        /// is executed before MPPTask::unregisterTask, and if MPPTask::unregisterTask is executed first, we will lost the error
         abort(error_msg, AbortType::ONERROR);
 }
 
 void MPPTask::abort(const String & message, AbortType abort_type)
 {
-    String abort_type_string;
+    String abort_type_string = abortTypeToString(abort_type);
     TaskStatus next_task_status;
     switch (abort_type)
     {
     case AbortType::ONCANCELLATION:
-        abort_type_string = "ONCANCELLATION";
         next_task_status = CANCELLED;
         break;
     case AbortType::ONERROR:
-        abort_type_string = "ONERROR";
         next_task_status = FAILED;
         break;
     }

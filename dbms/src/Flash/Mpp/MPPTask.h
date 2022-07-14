@@ -38,6 +38,16 @@
 namespace DB
 {
 class MPPTaskManager;
+
+enum class AbortType
+{
+    /// todo add ONKILL to distinguish between silent cancellation and kill
+    ONCANCELLATION,
+    ONERROR,
+};
+
+String abortTypeToString(AbortType abort_type);
+
 class MPPTask : public std::enable_shared_from_this<MPPTask>
     , private boost::noncopyable
 {
@@ -96,12 +106,6 @@ private:
     /// without waiting the tunnel to be connected
     void closeAllTunnels(const String & reason);
 
-    enum class AbortType
-    {
-        /// todo add ONKILL to distinguish between silent cancellation and kill
-        ONCANCELLATION,
-        ONERROR,
-    };
     void abort(const String & message, AbortType abort_type);
 
     void abortTunnels(const String & message, AbortType abort_type);
