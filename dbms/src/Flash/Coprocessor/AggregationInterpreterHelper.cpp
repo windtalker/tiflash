@@ -56,6 +56,24 @@ bool isFinalAgg(const tipb::Aggregation & aggregation)
     return is_final_agg;
 }
 
+bool partialResultAsInput(const tipb::Aggregation & aggregation)
+{
+    bool ret = false;
+    auto partial_result_as_input = [](const tipb::Expr & expr){
+        if (!expr.has_aggfuncmode())
+        return false;
+        return expr.aggfuncmode() == tipb::AggFunctionMode::FinalMode || expr.aggfuncmode() == tipb::AggFunctionMode::Partial2Mode;
+    };
+    if (aggregation.agg_func_size() > 0 && partial_result_as_input(aggregation.agg_func(0)))
+        ret = true;
+    for (int i = 1; i < aggregation.agg_func_size(); ++i)
+    {
+        if (unlikely(ret != partial_result_as_input(aggregation.agg_func(i))))
+            throw TiFlashException("Different aggregation mode detected", Errors::Coprocessor::BadRequest);
+    }
+    return ret;
+}
+
 bool isGroupByCollationSensitive(const Context & context)
 {
     // todo now we can tell if the aggregation is final stage or partial stage,

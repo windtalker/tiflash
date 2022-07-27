@@ -156,6 +156,10 @@ struct AggregateFunctionSumData
     {
         return sum;
     }
+    const T * getPtr() const
+    {
+        return &sum;
+    }
 };
 
 template <typename T>
@@ -288,6 +292,14 @@ struct NameCountSecondStage
     static constexpr auto name = "countSecondStage";
 };
 
+/// Computes the sum of the numbers, using the same data type for the result as for the input parameters.
+/// If the sum exceeds the maximum value for this data type, it is calculated with overflow.
+/// Used when the input data is already the partial result.(for example: second stage of sum in MPP)
+struct NameSumWithOverflow
+{
+    static constexpr auto name = "sumWithOverflow";
+};
+
 /// Counts the sum of the numbers.
 template <typename T, typename TResult, typename Data, typename Name = NameSum>
 class AggregateFunctionSum final : public IAggregateFunctionDataHelper<Data, AggregateFunctionSum<T, TResult, Data, Name>>
@@ -301,14 +313,15 @@ public:
 
     String getName() const override { return Name::name; }
 
-    ScaleType result_scale;
-    PrecType result_prec;
+    ScaleType result_scale{};
+    PrecType result_prec{};
 
     AggregateFunctionSum() = default;
 
     AggregateFunctionSum(PrecType prec, ScaleType scale)
     {
-        std::tie(result_prec, result_scale) = SumDecimalInferer::infer(prec, scale);
+        result_prec = prec;
+        result_scale = scale;
     };
 
     DataTypePtr getReturnType() const override
@@ -400,7 +413,7 @@ public:
     {
         if constexpr (IsDecimal<TResult>)
         {
-            static_cast<ColumnDecimal<TResult> &>(to).getData().push_back(this->data(place).get(), result_scale);
+            static_cast<ColumnDecimal<TResult> &>(to).getData().push_back_raw(reinterpret_cast<const char *>(this->data(place).getPtr()));
         }
         else
             static_cast<ColumnVector<TResult> &>(to).getData().push_back(this->data(place).get());

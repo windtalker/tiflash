@@ -33,31 +33,38 @@ template <typename T, typename TResult>
 using AggregateFunctionSumDecimal = AggregateFunctionSum<T, TResult, AggregateFunctionSumData<TResult>>;
 
 template <typename T>
-using AggregateFunctionSumWithOverflow = AggregateFunctionSum<T, T, AggregateFunctionSumData<T>>;
+using AggregateFunctionSumWithOverflow = AggregateFunctionSum<T, T, AggregateFunctionSumData<T>, NameSumWithOverflow>;
 
 template <typename T>
 using AggregateFunctionSumKahan = AggregateFunctionSum<T, Float64, AggregateFunctionSumKahanData<Float64>>;
 
+std::tuple<PrecType, ScaleType> decimalSumInfer(const String & name, PrecType prec, ScaleType scale)
+{
+    if (name == NameSumWithOverflow::name)
+        return {prec, scale};
+    return SumDecimalInferer::infer(prec, scale);
+}
+
 template <typename T>
-AggregateFunctionPtr createDecimalFunction(const IDataType * p)
+AggregateFunctionPtr createDecimalFunction(const IDataType * p, const String & name)
 {
     if (auto dec_type = typeid_cast<const DataTypeDecimal<T> *>(p))
     {
         PrecType prec = dec_type->getPrec();
         ScaleType scale = dec_type->getScale();
-        auto [result_prec, result_scale] = SumDecimalInferer::infer(prec, scale);
+        auto [result_prec, result_scale] = decimalSumInfer(name, prec, scale);
         auto result_type = createDecimal(result_prec, result_scale);
         if (checkDecimal<Decimal32>(*result_type))
-            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal32>(*dec_type, prec, scale));
+            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal32>(*dec_type, result_prec, result_scale));
 
         if (checkDecimal<Decimal64>(*result_type))
-            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal64>(*dec_type, prec, scale));
+            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal64>(*dec_type, result_prec, result_scale));
 
         if (checkDecimal<Decimal128>(*result_type))
-            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal128>(*dec_type, prec, scale));
+            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal128>(*dec_type, result_prec, result_scale));
 
         if (checkDecimal<Decimal256>(*result_type))
-            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal256>(*dec_type, prec, scale));
+            return AggregateFunctionPtr(createWithDecimalType<AggregateFunctionSumDecimal, Decimal256>(*dec_type, result_prec, result_scale));
     }
     return nullptr;
 }
@@ -70,14 +77,14 @@ AggregateFunctionPtr createAggregateFunctionSum(const std::string & name, const 
 
     AggregateFunctionPtr res;
     const IDataType * p = argument_types[0].get();
-    if ((res = createDecimalFunction<Decimal32>(p)) != nullptr) {}
-    else if ((res = createDecimalFunction<Decimal64>(p)) != nullptr)
+    if ((res = createDecimalFunction<Decimal32>(p, name)) != nullptr) {}
+    else if ((res = createDecimalFunction<Decimal64>(p, name)) != nullptr)
     {
     }
-    else if ((res = createDecimalFunction<Decimal128>(p)) != nullptr)
+    else if ((res = createDecimalFunction<Decimal128>(p, name)) != nullptr)
     {
     }
-    else if ((res = createDecimalFunction<Decimal256>(p)) != nullptr)
+    else if ((res = createDecimalFunction<Decimal256>(p, name)) != nullptr)
     {
     }
     else
@@ -92,11 +99,12 @@ AggregateFunctionPtr createAggregateFunctionSum(const std::string & name, const 
 } // namespace
 
 extern const String count_second_stage = NameCountSecondStage::name;
+extern const String sum_with_overflow = NameSumWithOverflow::name;
 
 void registerAggregateFunctionSum(AggregateFunctionFactory & factory)
 {
     factory.registerFunction("sum", createAggregateFunctionSum<AggregateFunctionSumSimple>, AggregateFunctionFactory::CaseInsensitive);
-    factory.registerFunction("sumWithOverflow", createAggregateFunctionSum<AggregateFunctionSumWithOverflow>);
+    factory.registerFunction(NameSumWithOverflow::name, createAggregateFunctionSum<AggregateFunctionSumWithOverflow>);
     factory.registerFunction("sumKahan", createAggregateFunctionSum<AggregateFunctionSumKahan>);
     factory.registerFunction(count_second_stage, createAggregateFunctionSum<AggregateFunctionCountSecondStage>, AggregateFunctionFactory::CaseInsensitive);
 }

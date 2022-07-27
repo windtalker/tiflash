@@ -874,8 +874,8 @@ void Aggregator::convertToBlockImpl(
 template <typename Mapped>
 inline void Aggregator::insertAggregatesIntoColumns(
     Mapped & mapped,
-    MutableColumns & final_aggregate_columns,
-    Arena * arena) const
+    MutableColumns & /*final_aggregate_columns*/,
+    Arena * ) const
 {
     /** Final values of aggregate functions are inserted to columns.
       * Then states of aggregate functions, that are not longer needed, are destroyed.
@@ -897,17 +897,18 @@ inline void Aggregator::insertAggregatesIntoColumns(
       * But we should mark that the data no longer owns these states.
       */
 
-    size_t insert_i = 0;
+    //size_t insert_i = 0;
     std::exception_ptr exception;
 
     try
     {
         /// Insert final values of aggregate functions into columns.
-        for (; insert_i < params.aggregates_size; ++insert_i)
-            aggregate_functions[insert_i]->insertResultInto(
-                mapped + offsets_of_aggregate_states[insert_i],
-                *final_aggregate_columns[insert_i],
-                arena);
+       // for (; insert_i < params.aggregates_size; ++insert_i)
+       //     aggregate_functions[insert_i]->insertResultInto(
+       //         mapped + offsets_of_aggregate_states[insert_i],
+       //         *final_aggregate_columns[insert_i],
+       //         arena);
+       // final_aggregate_columns[insert_i]->insertDefault();
     }
     catch (...)
     {
@@ -923,13 +924,13 @@ inline void Aggregator::insertAggregatesIntoColumns(
         * But it's only for states that has been transferred to ColumnAggregateFunction
         *  before exception has been thrown;
         */
-    for (size_t destroy_i = 0; destroy_i < params.aggregates_size; ++destroy_i)
-    {
-        /// If ownership was not transferred to ColumnAggregateFunction.
-        if (!(destroy_i < insert_i && aggregate_functions[destroy_i]->isState()))
-            aggregate_functions[destroy_i]->destroy(
-                mapped + offsets_of_aggregate_states[destroy_i]);
-    }
+    //for (size_t destroy_i = 0; destroy_i < params.aggregates_size; ++destroy_i)
+    //{
+    //    /// If ownership was not transferred to ColumnAggregateFunction.
+    //    if (!(destroy_i < insert_i && aggregate_functions[destroy_i]->isState()))
+    //        aggregate_functions[destroy_i]->destroy(
+    //            mapped + offsets_of_aggregate_states[destroy_i]);
+    //}
 
     /// Mark the cell as destroyed so it will not be destroyed in destructor.
     mapped = nullptr;
@@ -945,15 +946,44 @@ void NO_INLINE Aggregator::convertToBlockImplFinal(
     Table & data,
     std::vector<IColumn *> key_columns,
     MutableColumns & final_aggregate_columns,
-    Arena * arena) const
+    Arena * /*arena*/) const
 {
     auto shuffled_key_sizes = method.shuffleKeyColumns(key_columns, key_sizes);
     const auto & key_sizes_ref = shuffled_key_sizes ? *shuffled_key_sizes : key_sizes;
-
-    data.forEachValue([&](const auto & key, auto & mapped) {
+    //final_aggregate_columns[0]->cloneResized(data.size());
+    auto * column = final_aggregate_columns[0].get();
+    NullMap * null_map_ptr = nullptr;
+    ColumnDecimal<Decimal128>::Container * decimal_data_ptr = nullptr;
+    MutableColumnPtr  mutable_null_map_column = nullptr;
+    MutableColumnPtr  mutable_decimal_column = nullptr;
+    if (column->isColumnNullable()) {
+        auto * nullable_column = checkAndGetColumn<ColumnNullable>(column);
+        auto & null_map_column_ptr = nullable_column->getNullMapColumnPtr();
+        auto & nested_column_ptr = nullable_column->getNestedColumnPtr();
+        mutable_null_map_column = (*std::move(null_map_column_ptr)).mutate();
+        mutable_decimal_column = (*std::move(nested_column_ptr)).mutate();
+        NullMap & mutable_null_map = static_cast<ColumnUInt8 &>(*mutable_null_map_column).getData();
+        auto & mutable_decimal_data = static_cast<ColumnDecimal<Decimal128> &>(*mutable_decimal_column).getData();
+        mutable_null_map.template resize(data.size());
+        mutable_decimal_data.template resize(data.size());
+        null_map_ptr = &mutable_null_map;
+        decimal_data_ptr = &mutable_decimal_data;
+    } else {
+        auto & mutable_decimal_data = static_cast<ColumnDecimal<Decimal128> &>(*final_aggregate_columns[0]).getData();
+        decimal_data_ptr = &mutable_decimal_data;
+    }
+    int i = 0;
+    data.forEachValue([&](const auto & key, auto & /*mapped*/) {
         method.insertKeyIntoColumns(key, key_columns, key_sizes_ref, params.collators);
-        insertAggregatesIntoColumns(mapped, final_aggregate_columns, arena);
+        //insertAggregatesIntoColumns(mapped, final_aggregate_columns, arena);
+        //final_aggregate_columns[0]->insertDefault();
+        if (null_map_ptr != nullptr)
+            (*null_map_ptr)[i] = 0;
+        (*decimal_data_ptr)[i] = 0;
+        i++;
     });
+    if (final_aggregate_columns[0]->isColumnNullable())
+        final_aggregate_columns[0] = ColumnNullable::create(std::move(mutable_decimal_column), std::move(mutable_null_map_column));
 }
 
 template <typename Method, typename Table>

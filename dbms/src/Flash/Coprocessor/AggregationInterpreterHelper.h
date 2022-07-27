@@ -28,6 +28,8 @@ namespace AggregationInterpreterHelper
 {
 bool isFinalAgg(const tipb::Aggregation & aggregation);
 
+bool partialResultAsInput(const tipb::Aggregation & aggregation);
+
 bool isGroupByCollationSensitive(const Context & context);
 
 Aggregator::Params buildParams(

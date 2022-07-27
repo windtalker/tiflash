@@ -498,6 +498,7 @@ protected:
 
     static Data & data(AggregateDataPtr __restrict place) { return *reinterpret_cast<Data *>(place); }
     static const Data & data(ConstAggregateDataPtr __restrict place) { return *reinterpret_cast<const Data *>(place); }
+    static const bool has_trivial_destructor = std::is_trivially_destructible_v<Data>;
 
 public:
     void setCollators(TiDB::TiDBCollators & collators_) override
@@ -507,7 +508,10 @@ public:
 
     void create(AggregateDataPtr __restrict place) const override { this->setDataCollators(new (place) Data); }
 
-    void destroy(AggregateDataPtr __restrict place) const noexcept override { data(place).~Data(); }
+    void destroy(AggregateDataPtr __restrict place) const noexcept override {
+        if constexpr (!has_trivial_destructor)
+            data(place).~Data();
+    }
 
     bool hasTrivialDestructor() const override { return std::is_trivially_destructible_v<Data>; }
 

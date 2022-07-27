@@ -20,6 +20,7 @@
 #include <DataTypes/DataTypeNullable.h>
 #include <DataTypes/DataTypesNumber.h>
 #include <DataTypes/FieldToDataType.h>
+#include <Flash/Coprocessor/AggregationInterpreterHelper.h>
 #include <Flash/Coprocessor/DAGCodec.h>
 #include <Flash/Coprocessor/DAGExpressionAnalyzer.h>
 #include <Flash/Coprocessor/DAGExpressionAnalyzerHelper.h>
@@ -49,6 +50,7 @@ DAGExpressionAnalyzer::DAGExpressionAnalyzer(std::vector<NameAndTypePair> source
 {}
 
 extern const String count_second_stage;
+extern const String sum_with_overflow;
 
 namespace
 {
@@ -67,6 +69,7 @@ tipb::Expr constructTZExpr(const TimezoneInfo & dag_timezone_info)
 String getAggFuncName(
     const tipb::Expr & expr,
     const tipb::Aggregation & agg,
+    bool partial_result_as_input,
     const Settings & settings)
 {
     String agg_func_name = getAggFunctionName(expr);
@@ -82,6 +85,8 @@ String getAggFuncName(
         /// this is a little hack: if the query does not have group by column, and the result of sum is not nullable, then the sum
         /// must be the second stage for count, in this case we should return 0 instead of null if the input is empty.
         return count_second_stage;
+    } else if (partial_result_as_input && agg_func_name == sum_func_name) {
+        return sum_with_overflow;
     }
 
     return agg_func_name;
@@ -349,17 +354,18 @@ void DAGExpressionAnalyzer::buildAggFuncs(
     AggregateDescriptions & aggregate_descriptions,
     NamesAndTypes & aggregated_columns)
 {
+    bool partial_result_as_input = AggregationInterpreterHelper::partialResultAsInput(aggregation);
     for (const tipb::Expr & expr : aggregation.agg_func())
     {
         if (expr.tp() == tipb::ExprType::GroupConcat)
         {
-            buildGroupConcat(expr, actions, getAggFuncName(expr, aggregation, settings), aggregate_descriptions, aggregated_columns, aggregation.group_by().empty());
+            buildGroupConcat(expr, actions, getAggFuncName(expr, aggregation, partial_result_as_input, settings), aggregate_descriptions, aggregated_columns, aggregation.group_by().empty());
         }
         else
         {
             /// if there is group by clause, there is no need to consider the empty input case
             bool empty_input_as_null = aggregation.group_by().empty();
-            buildCommonAggFunc(expr, actions, getAggFuncName(expr, aggregation, settings), aggregate_descriptions, aggregated_columns, empty_input_as_null);
+            buildCommonAggFunc(expr, actions, getAggFuncName(expr, aggregation, partial_result_as_input, settings), aggregate_descriptions, aggregated_columns, empty_input_as_null);
         }
     }
 }
@@ -1205,6 +1211,8 @@ String DAGExpressionAnalyzer::appendCast(const DataTypePtr & target_type, const 
 {
     // need to add cast function
     // first construct the second argument
+    auto source_type = actions->getSampleBlock().getByName(expr_name).type;
+    LOG_FMT_ERROR(context.getDAGContext()->log, "Add implicit cast for expr {}: from {} to {}", expr_name, source_type->getName(), target_type->getName());
     tipb::Expr type_expr = constructStringLiteralTiExpr(target_type->getName());
     auto type_expr_name = getActions(type_expr, actions);
     String cast_expr_name = applyFunction("CAST", {expr_name, type_expr_name}, actions, nullptr);
