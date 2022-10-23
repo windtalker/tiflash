@@ -949,6 +949,8 @@ protected:
     // If there are states whose alignment are v1, ..vn, align_aggregate_states will be max(v1, ... vn)
     size_t align_aggregate_states = 1;
 
+    bool inplace_agg_state = false;
+
     bool all_aggregates_has_trivial_destructor = false;
 
     /// How many RAM were used to process the query before processing the first block.

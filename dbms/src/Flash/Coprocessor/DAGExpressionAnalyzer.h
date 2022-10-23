@@ -183,7 +183,8 @@ public:
         const tipb::Aggregation & aggregation,
         const ExpressionActionsPtr & actions,
         AggregateDescriptions & aggregate_descriptions,
-        NamesAndTypes & aggregated_columns);
+        NamesAndTypes & aggregated_columns,
+        const std::unordered_map<String, NameAndTypePair> & agg_key_map);
 
     void buildAggGroupBy(
         const google::protobuf::RepeatedPtrField<tipb::Expr> & group_by,
@@ -191,7 +192,7 @@ public:
         AggregateDescriptions & aggregate_descriptions,
         NamesAndTypes & aggregated_columns,
         Names & aggregation_keys,
-        std::unordered_set<String> & agg_key_set,
+        std::unordered_map<String, NameAndTypePair> & agg_key_map,
         bool group_by_collation_sensitive,
         TiDB::TiDBCollators & collators);
 
@@ -225,6 +226,15 @@ private:
         AggregateDescriptions & aggregate_descriptions,
         NamesAndTypes & aggregated_columns,
         bool empty_input_as_null);
+
+    void buildFirstRowAggFunc(
+        const tipb::Expr & expr,
+        const ExpressionActionsPtr & actions,
+        const String & agg_func_name,
+        AggregateDescriptions & aggregate_descriptions,
+        NamesAndTypes & aggregated_columns,
+        bool empty_input_as_null,
+        const std::unordered_map<String, NameAndTypePair> & agg_key_map);
 
     void buildLeadLag(
         const tipb::Expr & expr,
@@ -260,7 +270,7 @@ private:
         const ExpressionActionsPtr & actions,
         const String & expr_name);
 
-    String appendCastIfNeeded(
+    String appendCastForFunctionExpr(
         const tipb::Expr & expr,
         const ExpressionActionsPtr & actions,
         const String & expr_name);

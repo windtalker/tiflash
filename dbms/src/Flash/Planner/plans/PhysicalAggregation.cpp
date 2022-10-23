@@ -47,23 +47,29 @@ PhysicalPlanNodePtr PhysicalAggregation::build(
 
     DAGExpressionAnalyzer analyzer{child->getSchema(), context};
     ExpressionActionsPtr before_agg_actions = PhysicalPlanHelper::newActions(child->getSampleBlock(), context);
-    NamesAndTypes aggregated_columns;
+    NamesAndTypes agg_key_columns;
+    NamesAndTypes agg_func_columns;
     AggregateDescriptions aggregate_descriptions;
     Names aggregation_keys;
     TiDB::TiDBCollators collators;
     {
-        std::unordered_set<String> agg_key_set;
-        analyzer.buildAggFuncs(aggregation, before_agg_actions, aggregate_descriptions, aggregated_columns);
+        std::unordered_map<String, NameAndTypePair> agg_key_map;
         analyzer.buildAggGroupBy(
             aggregation.group_by(),
             before_agg_actions,
             aggregate_descriptions,
-            aggregated_columns,
+            agg_key_columns,
             aggregation_keys,
-            agg_key_set,
+            agg_key_map,
             AggregationInterpreterHelper::isGroupByCollationSensitive(context),
             collators);
+        analyzer.buildAggFuncs(aggregation, before_agg_actions, aggregate_descriptions,
+                               agg_func_columns, agg_key_map);
     }
+
+    NamesAndTypes aggregated_columns = std::move(agg_func_columns);
+    for (const auto & agg_key_column : agg_key_columns)
+        aggregated_columns.emplace_back(agg_key_column);
 
     auto expr_after_agg_actions = PhysicalPlanHelper::newActions(aggregated_columns, context);
     analyzer.reset(aggregated_columns);

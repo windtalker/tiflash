@@ -322,6 +322,33 @@ void DAGExpressionAnalyzer::buildGroupConcat(
     aggregated_columns.emplace_back(func_string, result_type);
 }
 
+void DAGExpressionAnalyzer::buildFirstRowAggFunc(
+    const tipb::Expr & expr,
+    const ExpressionActionsPtr & actions,
+    const String & agg_func_name,
+    AggregateDescriptions & aggregate_descriptions,
+    NamesAndTypes & aggregated_columns,
+    bool empty_input_as_null,
+    const std::unordered_map<String, NameAndTypePair> & agg_key_map)
+{
+    auto child_size = expr.children_size();
+    RUNTIME_CHECK_MSG(child_size == 1, "Aggregate Function First only support one argument");
+    Names arg_names;
+    DataTypes arg_types;
+    TiDB::TiDBCollators arg_collators;
+
+    for (Int32 i = 0; i < child_size; ++i)
+    {
+        fillArgumentDetail(actions, expr.children(i), arg_names, arg_types, arg_collators);
+    }
+    if (agg_key_map.find(arg_names[0]) != agg_key_map.end())
+    {
+        aggregated_columns.push_back(agg_key_map.find(arg_names[0])->second);
+        return;
+    }
+    appendAggDescription(arg_names, arg_types, arg_collators, agg_func_name, aggregate_descriptions, aggregated_columns, empty_input_as_null);
+}
+
 void DAGExpressionAnalyzer::buildCommonAggFunc(
     const tipb::Expr & expr,
     const ExpressionActionsPtr & actions,
@@ -353,22 +380,21 @@ void DAGExpressionAnalyzer::buildAggGroupBy(
     const google::protobuf::RepeatedPtrField<tipb::Expr> & group_by,
     const ExpressionActionsPtr & actions,
     AggregateDescriptions & aggregate_descriptions,
-    NamesAndTypes & aggregated_columns,
+    NamesAndTypes & group_by_columns,
     Names & aggregation_keys,
-    std::unordered_set<String> & agg_key_set,
+    std::unordered_map<String, NameAndTypePair> & agg_key_map,
     bool group_by_collation_sensitive,
     TiDB::TiDBCollators & collators)
 {
     for (const tipb::Expr & expr : group_by)
     {
         String name = getActions(expr, actions);
-        bool duplicated_key = agg_key_set.find(name) != agg_key_set.end();
+        bool duplicated_key = agg_key_map.find(name) != agg_key_map.end();
         if (!duplicated_key)
         {
             /// note this assume that column with the same name has the same collator
             /// need double check this assumption when we support agg with collation
             aggregation_keys.push_back(name);
-            agg_key_set.emplace(name);
         }
         /// when group_by_collation_sensitive is true, TiFlash will do the aggregation with collation
         /// info, since the aggregation in TiFlash is actually the partial stage, and TiDB always do
@@ -387,19 +413,21 @@ void DAGExpressionAnalyzer::buildAggGroupBy(
             {
                 /// if the column is a string with collation info, the `sort_key` of the column is used during
                 /// aggregation, but we can not reconstruct the origin column by `sort_key`, so add an extra
-                /// extra aggregation function any(group_by_column) here as the output of the group by column
+                /// extra aggregation function first_row(group_by_column) here as the output of the group by column
                 TiDB::TiDBCollators arg_collators{collator};
-                appendAggDescription({name}, {type}, arg_collators, "any", aggregate_descriptions, aggregated_columns, false);
+                appendAggDescription({name}, {type}, arg_collators, "first_row", aggregate_descriptions, group_by_columns, false);
             }
             else
             {
-                aggregated_columns.emplace_back(name, actions->getSampleBlock().getByName(name).type);
+                group_by_columns.emplace_back(name, actions->getSampleBlock().getByName(name).type);
             }
         }
         else
         {
-            aggregated_columns.emplace_back(name, actions->getSampleBlock().getByName(name).type);
+            group_by_columns.emplace_back(name, actions->getSampleBlock().getByName(name).type);
         }
+        if (!duplicated_key)
+            agg_key_map[name] = group_by_columns[group_by_columns.size()-1];
     }
 }
 
@@ -407,18 +435,23 @@ void DAGExpressionAnalyzer::buildAggFuncs(
     const tipb::Aggregation & aggregation,
     const ExpressionActionsPtr & actions,
     AggregateDescriptions & aggregate_descriptions,
-    NamesAndTypes & aggregated_columns)
+    NamesAndTypes & aggregated_columns,
+    const std::unordered_map<String, NameAndTypePair> & agg_key_map)
 {
+    /// if there is group by clause, there is no need to consider the empty input case
+    bool empty_input_as_null = aggregation.group_by().empty();
     for (const tipb::Expr & expr : aggregation.agg_func())
     {
         if (expr.tp() == tipb::ExprType::GroupConcat)
         {
-            buildGroupConcat(expr, actions, getAggFuncName(expr, aggregation, settings), aggregate_descriptions, aggregated_columns, aggregation.group_by().empty());
+            buildGroupConcat(expr, actions, getAggFuncName(expr, aggregation, settings), aggregate_descriptions, aggregated_columns, empty_input_as_null);
+        }
+        else if (expr.tp() == tipb::ExprType::First)
+        {
+            buildFirstRowAggFunc(expr, actions, getAggFuncName(expr, aggregation, settings), aggregate_descriptions, aggregated_columns, empty_input_as_null, agg_key_map);
         }
         else
         {
-            /// if there is group by clause, there is no need to consider the empty input case
-            bool empty_input_as_null = aggregation.group_by().empty();
             buildCommonAggFunc(expr, actions, getAggFuncName(expr, aggregation, settings), aggregate_descriptions, aggregated_columns, empty_input_as_null);
         }
     }
@@ -438,12 +471,14 @@ std::tuple<Names, TiDB::TiDBCollators, AggregateDescriptions, ExpressionActionsP
     auto & step = initAndGetLastStep(chain);
 
     NamesAndTypes aggregated_columns;
+    NamesAndTypes group_by_columns;
+    NamesAndTypes agg_func_columns;
     AggregateDescriptions aggregate_descriptions;
     Names aggregation_keys;
     TiDB::TiDBCollators collators;
-    std::unordered_set<String> agg_key_set;
-    buildAggFuncs(agg, step.actions, aggregate_descriptions, aggregated_columns);
-    buildAggGroupBy(agg.group_by(), step.actions, aggregate_descriptions, aggregated_columns, aggregation_keys, agg_key_set, group_by_collation_sensitive, collators);
+    std::unordered_map<String, NameAndTypePair> agg_key_map;
+    buildAggGroupBy(agg.group_by(), step.actions, aggregate_descriptions, group_by_columns, aggregation_keys, agg_key_map, group_by_collation_sensitive, collators);
+    buildAggFuncs(agg, step.actions, aggregate_descriptions, agg_func_columns, agg_key_map);
     // set required output for agg funcs's arguments and group by keys.
     for (const auto & aggregate_description : aggregate_descriptions)
     {
@@ -453,7 +488,9 @@ std::tuple<Names, TiDB::TiDBCollators, AggregateDescriptions, ExpressionActionsP
     for (const auto & aggregation_key : aggregation_keys)
         step.required_output.push_back(aggregation_key);
 
-    source_columns = std::move(aggregated_columns);
+    source_columns = std::move(agg_func_columns);
+    for (const auto & group_by_column : group_by_columns)
+        aggregated_columns.emplace_back(group_by_column);
 
     auto before_agg = chain.getLastActions();
     chain.finalize();
@@ -1051,7 +1088,7 @@ void DAGExpressionAnalyzer::appendCastAfterWindow(
     NamesAndTypes updated_window_columns;
 
     auto update_cast_column = [&](const tipb::Expr & expr, const NameAndTypePair & origin_column) {
-        String updated_name = appendCastIfNeeded(expr, actions, origin_column.name);
+        String updated_name = appendCastForFunctionExpr(expr, actions, origin_column.name);
         if (origin_column.name != updated_name)
         {
             DataTypePtr type = actions->getSampleBlock().getByName(updated_name).type;
@@ -1089,7 +1126,7 @@ void DAGExpressionAnalyzer::appendCastAfterAgg(
     std::vector<NameAndTypePair> updated_aggregated_columns;
 
     auto update_cast_column = [&](const tipb::Expr & expr, const NameAndTypePair & origin_column) {
-        String updated_name = appendCastIfNeeded(expr, actions, origin_column.name);
+        String updated_name = appendCastForFunctionExpr(expr, actions, origin_column.name);
         if (origin_column.name != updated_name)
         {
             DataTypePtr type = actions->getSampleBlock().getByName(updated_name).type;
@@ -1298,7 +1335,7 @@ String DAGExpressionAnalyzer::alignReturnType(
     DataTypePtr orig_type = actions->getSampleBlock().getByName(expr_name).type;
     if (force_uint8 && isUInt8Type(orig_type))
         return expr_name;
-    String updated_name = appendCastIfNeeded(expr, actions, expr_name);
+    String updated_name = appendCastForFunctionExpr(expr, actions, expr_name);
     DataTypePtr updated_type = actions->getSampleBlock().getByName(updated_name).type;
     if (force_uint8 && !isUInt8Type(updated_type))
         updated_name = convertToUInt8(actions, updated_name);
@@ -1334,7 +1371,7 @@ String DAGExpressionAnalyzer::appendCast(const DataTypePtr & target_type, const 
     return cast_expr_name;
 }
 
-String DAGExpressionAnalyzer::appendCastIfNeeded(
+String DAGExpressionAnalyzer::appendCastForFunctionExpr(
     const tipb::Expr & expr,
     const ExpressionActionsPtr & actions,
     const String & expr_name)
@@ -1349,8 +1386,22 @@ String DAGExpressionAnalyzer::appendCastIfNeeded(
     {
         DataTypePtr expected_type = getDataTypeByFieldTypeForComputingLayer(expr.field_type());
         DataTypePtr actual_type = actions->getSampleBlock().getByName(expr_name).type;
-        if (expected_type->getName() != actual_type->getName())
-            return appendCast(expected_type, actions, expr_name);
+        if (expected_type->equals(*actual_type))
+            return expr_name;
+        if (expected_type->isNullable() && !actual_type->isNullable())
+        {
+            /// if TiDB require nullable type while TiFlash get not null type
+            /// don't add convert if the nested type is the same since just
+            /// convert the type to nullable is meaningless and will affect
+            /// the performance of TiFlash
+            if (removeNullable(expected_type)->equals(*actual_type))
+            {
+                LOG_TRACE(context.getDAGContext()->log, "Skip implicit cast for column {}, expected type {}, actual type {}", expr_name, expected_type->getName(), actual_type->getName());
+                return expr_name;
+            }
+        }
+        LOG_TRACE(context.getDAGContext()->log, "Add implicit cast for column {}, expected type {}, actual type {}", expr_name, expected_type->getName(), actual_type->getName());
+        return appendCast(expected_type, actions, expr_name);
     }
     return expr_name;
 }

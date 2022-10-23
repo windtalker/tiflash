@@ -425,9 +425,7 @@ public:
     void insertResultInto(ConstAggregateDataPtr __restrict place, IColumn & to, Arena *) const override
     {
         if constexpr (IsDecimal<TResult>)
-        {
-            static_cast<ColumnDecimal<TResult> &>(to).getData().push_back(this->data(place).get(), result_scale);
-        }
+            static_cast<ColumnDecimal<TResult> &>(to).getData().push_back(this->data(place).get());
         else
             static_cast<ColumnVector<TResult> &>(to).getData().push_back(this->data(place).get());
     }

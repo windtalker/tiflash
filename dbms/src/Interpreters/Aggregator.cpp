@@ -197,6 +197,7 @@ Aggregator::Aggregator(const Params & params_, const String & req_id)
             all_aggregates_has_trivial_destructor = false;
     }
 
+    inplace_agg_state = sizeof(AggregateDataPtr) == total_size_of_aggregate_states;
     method_chosen = chooseAggregationMethod();
 }
 
@@ -422,49 +423,92 @@ ALWAYS_INLINE void Aggregator::executeImplBatch(
 
     std::unique_ptr<AggregateDataPtr[]> places(new AggregateDataPtr[rows]);
 
-    for (size_t i = 0; i < rows; ++i)
+    if (inplace_agg_state)
     {
-        AggregateDataPtr aggregate_data = nullptr;
-
-        if constexpr (!no_more_keys)
+        for (size_t i = 0; i < rows; ++i)
         {
-            auto emplace_result = state.emplaceKey(method.data, i, *aggregates_pool, sort_key_containers);
+            AggregateDataPtr aggregate_data = nullptr;
 
-            /// If a new key is inserted, initialize the states of the aggregate functions, and possibly something related to the key.
-            if (emplace_result.isInserted())
+            if constexpr (!no_more_keys)
             {
-                /// exception-safety - if you can not allocate memory or create states, then destructors will not be called.
-                emplace_result.setMapped(nullptr);
+                auto emplace_result = state.emplaceKey(method.data, i, *aggregates_pool, sort_key_containers);
 
-                aggregate_data = aggregates_pool->alignedAlloc(total_size_of_aggregate_states, align_aggregate_states);
-                createAggregateStates(aggregate_data);
-
-                emplace_result.setMapped(aggregate_data);
+                /// If a new key is inserted, initialize the states of the aggregate functions, and possibly something related to the key.
+                if (emplace_result.isInserted())
+                {
+                    /// exception-safety - if you can not allocate memory or create states, then destructors will not be called.
+                    aggregate_data = reinterpret_cast<AggregateDataPtr>(&emplace_result.getMapped());
+                    createAggregateStates(aggregate_data);
+                    emplace_result.setMapped(reinterpret_cast<AggregateDataPtr>(*aggregate_data));
+                }
+                else
+                    aggregate_data = reinterpret_cast<AggregateDataPtr>(&emplace_result.getMapped());
             }
             else
-                aggregate_data = emplace_result.getMapped();
-        }
-        else
-        {
-            /// Add only if the key already exists.
-            auto find_result = state.findKey(method.data, i, *aggregates_pool, sort_key_containers);
-            if (find_result.isFound())
-                aggregate_data = find_result.getMapped();
-            else
-                aggregate_data = overflow_row;
-        }
+            {
+                /// Add only if the key already exists.
+                auto find_result = state.findKey(method.data, i, *aggregates_pool, sort_key_containers);
+                if (find_result.isFound())
+                    aggregate_data = find_result.getMapped();
+                else
+                    aggregate_data = overflow_row;
+            }
+            for (AggregateFunctionInstruction * inst = aggregate_instructions; inst->that; ++inst)
+            {
+                if (inst->offsets)
+                    throw Exception("not supported");
+                else
+                    inst->batch_that->add(aggregate_data + inst->state_offset, inst->batch_arguments, i, aggregates_pool);
+            }
 
-        places[i] = aggregate_data;
+        }
     }
-
-    /// Add values to the aggregate functions.
-    for (AggregateFunctionInstruction * inst = aggregate_instructions; inst->that; ++inst)
+    else
     {
-        if (inst->offsets)
-            inst->batch_that->addBatchArray(rows, places.get(), inst->state_offset, inst->batch_arguments, inst->offsets, aggregates_pool);
-        else
-            inst->batch_that->addBatch(rows, places.get(), inst->state_offset, inst->batch_arguments, aggregates_pool);
+        for (size_t i = 0; i < rows; ++i)
+        {
+            AggregateDataPtr aggregate_data = nullptr;
+
+            if constexpr (!no_more_keys)
+            {
+                auto emplace_result = state.emplaceKey(method.data, i, *aggregates_pool, sort_key_containers);
+
+                /// If a new key is inserted, initialize the states of the aggregate functions, and possibly something related to the key.
+                if (emplace_result.isInserted())
+                {
+                    /// exception-safety - if you can not allocate memory or create states, then destructors will not be called.
+                    emplace_result.setMapped(nullptr);
+
+                    aggregate_data = aggregates_pool->alignedAlloc(total_size_of_aggregate_states, align_aggregate_states);
+                    createAggregateStates(aggregate_data);
+
+                    emplace_result.setMapped(aggregate_data);
+                }
+                else
+                    aggregate_data = emplace_result.getMapped();
+            }
+            else
+            {
+                /// Add only if the key already exists.
+                auto find_result = state.findKey(method.data, i, *aggregates_pool, sort_key_containers);
+                if (find_result.isFound())
+                    aggregate_data = find_result.getMapped();
+                else
+                    aggregate_data = overflow_row;
+            }
+
+            places[i] = aggregate_data;
+        }
+        /// Add values to the aggregate functions.
+        for (AggregateFunctionInstruction * inst = aggregate_instructions; inst->that; ++inst)
+        {
+            if (inst->offsets)
+                inst->batch_that->addBatchArray(rows, places.get(), inst->state_offset, inst->batch_arguments, inst->offsets, aggregates_pool);
+            else
+                inst->batch_that->addBatch(rows, places.get(), inst->state_offset, inst->batch_arguments, aggregates_pool);
+        }
     }
+
 }
 
 void NO_INLINE Aggregator::executeWithoutKeyImpl(
@@ -963,10 +1007,21 @@ void NO_INLINE Aggregator::convertToBlockImplFinal(
     auto shuffled_key_sizes = method.shuffleKeyColumns(key_columns, key_sizes);
     const auto & key_sizes_ref = shuffled_key_sizes ? *shuffled_key_sizes : key_sizes;
 
-    data.forEachValue([&](const auto & key, auto & mapped) {
-        method.insertKeyIntoColumns(key, key_columns, key_sizes_ref, params.collators);
-        insertAggregatesIntoColumns(mapped, final_aggregate_columns, arena);
-    });
+    if (inplace_agg_state)
+    {
+        data.forEachValue([&](const auto & key, auto & mapped) {
+            method.insertKeyIntoColumns(key, key_columns, key_sizes_ref, params.collators);
+            auto *aaa = reinterpret_cast<AggregateDataPtr>(&mapped);
+            insertAggregatesIntoColumns(aaa, final_aggregate_columns, arena);
+        });
+    }
+    else
+    {
+        data.forEachValue([&](const auto & key, auto & mapped) {
+            method.insertKeyIntoColumns(key, key_columns, key_sizes_ref, params.collators);
+            insertAggregatesIntoColumns(mapped, final_aggregate_columns, arena);
+        });
+    }
 }
 
 template <typename Method, typename Table>
@@ -1311,26 +1366,54 @@ void NO_INLINE Aggregator::mergeDataImpl(
     Table & table_src,
     Arena * arena) const
 {
-    table_src.mergeToViaEmplace(table_dst,
-                                [&](AggregateDataPtr & __restrict dst, AggregateDataPtr & __restrict src, bool inserted) {
-                                    if (!inserted)
-                                    {
-                                        for (size_t i = 0; i < params.aggregates_size; ++i)
-                                            aggregate_functions[i]->merge(
-                                                dst + offsets_of_aggregate_states[i],
-                                                src + offsets_of_aggregate_states[i],
-                                                arena);
+    if (inplace_agg_state)
+    {
+        table_src.mergeToViaEmplace(table_dst,
+                                    [&](AggregateDataPtr & __restrict dst, AggregateDataPtr & __restrict src, bool inserted) {
+                                        auto *new_dst = reinterpret_cast<AggregateDataPtr>(&dst);
+                                        auto *new_src = reinterpret_cast<AggregateDataPtr>(&src);
+                                        if (!inserted)
+                                        {
+                                            for (size_t i = 0; i < params.aggregates_size; ++i)
+                                                aggregate_functions[i]->merge(
+                                                    new_dst + offsets_of_aggregate_states[i],
+                                                    new_src + offsets_of_aggregate_states[i],
+                                                    arena);
 
-                                        for (size_t i = 0; i < params.aggregates_size; ++i)
-                                            aggregate_functions[i]->destroy(src + offsets_of_aggregate_states[i]);
-                                    }
-                                    else
-                                    {
-                                        dst = src;
-                                    }
+                                            for (size_t i = 0; i < params.aggregates_size; ++i)
+                                                aggregate_functions[i]->destroy(new_src + offsets_of_aggregate_states[i]);
+                                        }
+                                        else
+                                        {
+                                            *new_dst = *new_src;
+                                        }
 
-                                    src = nullptr;
-                                });
+                                        new_src = nullptr;
+                                    });
+    }
+    else
+    {
+        table_src.mergeToViaEmplace(table_dst,
+                                    [&](AggregateDataPtr & __restrict dst, AggregateDataPtr & __restrict src, bool inserted) {
+                                        if (!inserted)
+                                        {
+                                            for (size_t i = 0; i < params.aggregates_size; ++i)
+                                                aggregate_functions[i]->merge(
+                                                    dst + offsets_of_aggregate_states[i],
+                                                    src + offsets_of_aggregate_states[i],
+                                                    arena);
+
+                                            for (size_t i = 0; i < params.aggregates_size; ++i)
+                                                aggregate_functions[i]->destroy(src + offsets_of_aggregate_states[i]);
+                                        }
+                                        else
+                                        {
+                                            dst = src;
+                                        }
+
+                                        src = nullptr;
+                                    });
+    }
     table_src.clearAndShrink();
 }
 
