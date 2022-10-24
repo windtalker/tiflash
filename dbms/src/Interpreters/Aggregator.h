@@ -768,6 +768,8 @@ public:
         /// Return empty result when aggregating without keys on empty set.
         bool empty_result_for_aggregation_by_empty_set;
 
+        bool enable_inplace_agg_state = false;
+
         const std::string tmp_path;
 
         TiDB::TiDBCollators collators;
@@ -784,6 +786,7 @@ public:
             size_t max_bytes_before_external_group_by_,
             bool empty_result_for_aggregation_by_empty_set_,
             const std::string & tmp_path_,
+            bool enable_inplace_agg_state_,
             const TiDB::TiDBCollators & collators_ = TiDB::dummy_collators)
             : src_header(src_header_)
             , keys(keys_)
@@ -797,6 +800,7 @@ public:
             , group_by_two_level_threshold_bytes(group_by_two_level_threshold_bytes_)
             , max_bytes_before_external_group_by(max_bytes_before_external_group_by_)
             , empty_result_for_aggregation_by_empty_set(empty_result_for_aggregation_by_empty_set_)
+            , enable_inplace_agg_state(enable_inplace_agg_state_)
             , tmp_path(tmp_path_)
             , collators(collators_)
         {
@@ -807,8 +811,9 @@ public:
                const ColumnNumbers & keys_,
                const AggregateDescriptions & aggregates_,
                bool overflow_row_,
+               bool enable_inplace_agg_state,
                const TiDB::TiDBCollators & collators_ = TiDB::dummy_collators)
-            : Params(Block(), keys_, aggregates_, overflow_row_, 0, OverflowMode::THROW, 0, 0, 0, false, "", collators_)
+            : Params(Block(), keys_, aggregates_, overflow_row_, 0, OverflowMode::THROW, 0, 0, 0, false, "", enable_inplace_agg_state, collators_)
         {
             intermediate_header = intermediate_header_;
         }

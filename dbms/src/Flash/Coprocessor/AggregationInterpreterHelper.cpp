@@ -105,6 +105,7 @@ Aggregator::Params buildParams(
         settings.max_bytes_before_external_group_by,
         !is_final_agg,
         context.getTemporaryPath(),
+        settings.enable_inplace_agg_state,
         has_collator ? collators : TiDB::dummy_collators);
 }
 

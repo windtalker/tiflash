@@ -197,7 +197,7 @@ Aggregator::Aggregator(const Params & params_, const String & req_id)
             all_aggregates_has_trivial_destructor = false;
     }
 
-    inplace_agg_state = sizeof(AggregateDataPtr) == total_size_of_aggregate_states;
+    inplace_agg_state = params.enable_inplace_agg_state ? (sizeof(AggregateDataPtr) == total_size_of_aggregate_states) : false;
     method_chosen = chooseAggregationMethod();
 }
 
@@ -1385,7 +1385,7 @@ void NO_INLINE Aggregator::mergeDataImpl(
                                         }
                                         else
                                         {
-                                            *new_dst = *new_src;
+                                            memcpy(new_dst, new_src, total_size_of_aggregate_states);
                                         }
 
                                         new_src = nullptr;

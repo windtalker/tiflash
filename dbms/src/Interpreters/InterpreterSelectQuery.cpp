@@ -984,7 +984,11 @@ void InterpreterSelectQuery::executeAggregation(Pipeline & pipeline, const Expre
       */
     bool allow_to_use_two_level_group_by = pipeline.streams.size() > 1 || settings.max_bytes_before_external_group_by != 0;
 
-    Aggregator::Params params(header, keys, aggregates, overflow_row, settings.max_rows_to_group_by, settings.group_by_overflow_mode, allow_to_use_two_level_group_by ? settings.group_by_two_level_threshold : SettingUInt64(0), allow_to_use_two_level_group_by ? settings.group_by_two_level_threshold_bytes : SettingUInt64(0), settings.max_bytes_before_external_group_by, settings.empty_result_for_aggregation_by_empty_set, context.getTemporaryPath());
+    Aggregator::Params params(header, keys, aggregates, overflow_row, settings.max_rows_to_group_by, settings.group_by_overflow_mode,
+                              allow_to_use_two_level_group_by ? settings.group_by_two_level_threshold : SettingUInt64(0),
+                              allow_to_use_two_level_group_by ? settings.group_by_two_level_threshold_bytes : SettingUInt64(0),
+                              settings.max_bytes_before_external_group_by, settings.empty_result_for_aggregation_by_empty_set,
+                              context.getTemporaryPath(), settings.enable_inplace_agg_state);
 
     /// If there are several sources, then we perform parallel aggregation
     if (pipeline.streams.size() > 1 || pipeline.streams_with_non_joined_data.size() > 1)
@@ -1053,10 +1057,9 @@ void InterpreterSelectQuery::executeMergeAggregated(Pipeline & pipeline, bool ov
       *  in the case of two-level aggregation, which is used for large results after GROUP BY,
       *  but it can work more slowly.
       */
-
-    Aggregator::Params params(header, keys, aggregates, overflow_row);
-
     const Settings & settings = context.getSettingsRef();
+
+    Aggregator::Params params(header, keys, aggregates, overflow_row, settings.enable_inplace_agg_state);
 
     if (!settings.distributed_aggregation_memory_efficient)
     {
