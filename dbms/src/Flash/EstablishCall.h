@@ -55,7 +55,7 @@ public:
 
     bool write(const mpp::MPPDataPacket & packet) override;
 
-    void tryFlushOne() override;
+    void tryFlushOne(bool on_finish_send_queue) override;
 
     void writeDone(const ::grpc::Status & status) override;
 
@@ -106,6 +106,8 @@ private:
     // It's protected by mu.
     bool ready = false;
 
+    bool flushed_after_send_queue_finish = false;
+
     // Let's implement a state machine with the following states.
     enum CallStatus
     {
@@ -114,7 +116,7 @@ private:
         ERR_HANDLE,
         FINISH
     };
-    CallStatus state; // The current serving state.
+    std::atomic<CallStatus> state; // The current serving state.
     std::shared_ptr<DB::MPPTunnel> mpp_tunnel = nullptr;
     std::shared_ptr<Stopwatch> stopwatch;
 };

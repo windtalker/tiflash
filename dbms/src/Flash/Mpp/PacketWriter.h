@@ -40,7 +40,7 @@ public:
     // Because for async writer,
     // the caller can't know if the rpc session is ready for writing.
     // If it is not ready, caller can't write a packet.
-    virtual void tryFlushOne() {}
+    virtual void tryFlushOne(bool /*on_finish_send_queue*/) {}
 
     // Finish rpc with a status. Needed by async writer. For sync writer it is useless but not harmful.
     virtual void writeDone(const ::grpc::Status & /*status*/) {}

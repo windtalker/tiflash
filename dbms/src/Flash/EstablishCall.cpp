@@ -49,11 +49,13 @@ EstablishCallData * EstablishCallData::spawn(AsyncFlashService * service, grpc::
     return new EstablishCallData(service, cq, notify_cq, is_shutdown);
 }
 
-void EstablishCallData::tryFlushOne()
+void EstablishCallData::tryFlushOne(bool on_finish_send_queue)
 {
     // check whether there is a valid msg to write
     {
         std::unique_lock lk(mu);
+        if (on_finish_send_queue)
+            flushed_after_send_queue_finish = true;
         if (ready && mpp_tunnel->isSendQueueNextPopNonBlocking()) //not ready or no packet
             ready = false;
         else
@@ -162,9 +164,12 @@ void EstablishCallData::proceed()
         std::unique_lock lk(mu);
         if (mpp_tunnel->isSendQueueNextPopNonBlocking())
         {
-            ready = false;
-            lk.unlock();
-            mpp_tunnel->sendJob(true);
+            if (flushed_after_send_queue_finish || !mpp_tunnel->isSendQueueFinished())
+            {
+                ready = false;
+                lk.unlock();
+                mpp_tunnel->sendJob(true);
+            }
         }
         else
             ready = true;

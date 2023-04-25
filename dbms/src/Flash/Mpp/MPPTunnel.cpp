@@ -110,7 +110,7 @@ void MPPTunnelBase<Writer>::finishSendQueue()
 {
     bool flag = send_queue.finish();
     if (flag && !is_local && is_async)
-        writer->tryFlushOne();
+        writer->tryFlushOne(true);
 }
 
 /// exit abnormally, such as being cancelled.
@@ -130,7 +130,7 @@ void MPPTunnelBase<Writer>::close(const String & reason)
                     FAIL_POINT_TRIGGER_EXCEPTION(FailPoints::exception_during_mpp_close_tunnel);
                     send_queue.push(std::make_shared<mpp::MPPDataPacket>(getPacketWithError(reason)));
                     if (!is_local && is_async)
-                        writer->tryFlushOne();
+                        writer->tryFlushOne(false);
                 }
                 catch (...)
                 {
@@ -165,7 +165,7 @@ void MPPTunnelBase<Writer>::write(const mpp::MPPDataPacket & data, bool close_af
             connection_profile_info.bytes += data.ByteSizeLong();
             connection_profile_info.packets += 1;
             if (!is_local && is_async)
-                writer->tryFlushOne();
+                writer->tryFlushOne(false);
             if (close_after_write)
             {
                 finishSendQueue();
