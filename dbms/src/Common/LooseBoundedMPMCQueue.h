@@ -19,6 +19,7 @@
 
 #include <condition_variable>
 #include <deque>
+#include "Functions/FunctionBinaryArithmetic.h"
 
 namespace DB
 {
@@ -151,58 +152,86 @@ public:
         return MPMCQueueResult::OK;
     }
 
+    void tryNotifyOneWriter() 
+    {
+        auto need_notify = false;
+        {
+            std::unique_lock lock(mu);
+            if (status != MPMCQueueStatus::CANCELLED && !isFullWithoutLock()) 
+            {
+                need_notify = true;
+            }
+        }
+        if (need_notify) 
+        {
+            notifyOneWriter();
+        }
+    }
+
     MPMCQueueResult pop(T & data)
     {
+        auto ret = MPMCQueueResult::OK;
         {
             std::unique_lock lock(mu);
             reader_cv.wait(lock, [&] { return !queue.empty() || (unlikely(status != MPMCQueueStatus::NORMAL)); });
 
             if unlikely (status == MPMCQueueStatus::CANCELLED)
-                return MPMCQueueResult::CANCELLED;
-
-            if (queue.empty())
+                ret = MPMCQueueResult::CANCELLED;
+            else
             {
-                assert(status == MPMCQueueStatus::FINISHED);
-                return MPMCQueueResult::FINISHED;
+                if (queue.empty())
+                {
+                    assert(status == MPMCQueueStatus::FINISHED);
+                    ret = MPMCQueueResult::FINISHED;
+                }
+                else
+                    data = popBack();
             }
-
-            data = popBack();
         }
-        notifyOneWriter();
-        return MPMCQueueResult::OK;
+        if (ret != MPMCQueueResult::CANCELLED)
+            notifyOneWriter();
+        return ret;
     }
 
     MPMCQueueResult tryPop(T & data)
     {
+        auto ret = MPMCQueueResult::OK;
         {
             std::lock_guard lock(mu);
             if unlikely (status == MPMCQueueStatus::CANCELLED)
-                return MPMCQueueResult::CANCELLED;
+                ret = MPMCQueueResult::CANCELLED;
+            else
+            {
+                if (queue.empty())
+                    return status == MPMCQueueStatus::NORMAL ? MPMCQueueResult::EMPTY : MPMCQueueResult::FINISHED;
+                else
+                    data = popBack();
+            }
 
-            if (queue.empty())
-                return status == MPMCQueueStatus::NORMAL ? MPMCQueueResult::EMPTY : MPMCQueueResult::FINISHED;
-
-            data = popBack();
         }
-        notifyOneWriter();
-        return MPMCQueueResult::OK;
+        if (ret != MPMCQueueResult::CANCELLED)
+            notifyOneWriter();
+        return ret;
     }
 
     MPMCQueueResult tryDequeue()
     {
+        auto ret = MPMCQueueResult::OK;
         {
             std::lock_guard lock(mu);
 
             if unlikely (status == MPMCQueueStatus::CANCELLED)
-                return MPMCQueueResult::CANCELLED;
-
-            if (queue.empty())
-                return status == MPMCQueueStatus::NORMAL ? MPMCQueueResult::EMPTY : MPMCQueueResult::FINISHED;
-
-            popBack();
+                ret = MPMCQueueResult::CANCELLED;
+            else {
+                if (queue.empty())
+                    ret = status == MPMCQueueStatus::NORMAL ? MPMCQueueResult::EMPTY : MPMCQueueResult::FINISHED;
+                else
+                    popBack();
+            }
         }
-        notifyOneWriter();
-        return MPMCQueueResult::OK;
+        if (ret != MPMCQueueResult::CANCELLED)
+            notifyOneWriter();
+        return ret;
     }
 
     size_t size() const

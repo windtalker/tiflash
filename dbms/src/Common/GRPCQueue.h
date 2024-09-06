@@ -227,6 +227,11 @@ public:
         return ret;
     }
 
+    void tryNotifyOneWriter() 
+    {
+        recv_queue.tryNotifyOneWriter();
+    }
+
     /// Non-blocking dequeue the queue.
     MPMCQueueResult tryDequeue()
     {
