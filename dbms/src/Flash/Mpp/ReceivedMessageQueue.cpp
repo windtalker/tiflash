@@ -14,6 +14,7 @@
 
 #include <Common/TiFlashMetrics.h>
 #include <Flash/Mpp/ReceivedMessageQueue.h>
+#include "Common/MPMCQueue.h"
 
 namespace DB
 {
@@ -152,6 +153,8 @@ MPMCQueueResult ReceivedMessageQueue::pop(size_t stream_id, ReceivedMessagePtr &
                 grpc_recv_queue.tryDequeue();
 #endif
             }
+        } else if (res != MPMCQueueResult::CANCELLED) {
+            grpc_recv_queue.tryNotifyOneWriter();
         }
     }
     else
