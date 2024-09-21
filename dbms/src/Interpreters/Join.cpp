@@ -34,6 +34,8 @@
 #include <exception>
 #include <magic_enum.hpp>
 
+#include "Flash/Pipeline/Schedule/Tasks/TaskHelper.h"
+
 namespace DB
 {
 namespace FailPoints
@@ -1486,17 +1488,22 @@ Block Join::joinBlockCross(ProbeProcessInfo & probe_process_info) const
     std::vector<Block> result_blocks;
     size_t result_rows = 0;
 
+    Stopwatch stopwatch{CLOCK_MONOTONIC_COARSE};
     while (true)
     {
         if (is_cancelled())
             return {};
         Block block = doJoinBlockCross(probe_process_info);
+        block.cloneEmpty();
         assert(block);
         block = removeUselessColumn(block);
         result_rows += block.rows();
         result_blocks.push_back(std::move(block));
-        if (probe_process_info.all_rows_joined_finish
-            || (may_probe_side_expanded_after_join && result_rows >= probe_process_info.min_result_block_size))
+        auto should_stop_execution = probe_process_info.all_rows_joined_finish
+            || (may_probe_side_expanded_after_join && result_rows >= probe_process_info.min_result_block_size);
+        if (!should_stop_execution && in_pipeline_execution)
+            should_stop_execution = stopwatch.elapsed() >= 10 * YIELD_MAX_TIME_SPENT_NS;
+        if (should_stop_execution)
             break;
     }
 

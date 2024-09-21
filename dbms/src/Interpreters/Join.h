@@ -316,6 +316,7 @@ public:
     size_t getProbeCacheColumnThreshold() const { return probe_cache_column_threshold; }
 
     void setCancellationHook(CancellationHook cancellation_hook) { is_cancelled = cancellation_hook; }
+    void setInPipelineExecution(bool in_pipeline_execution_) { in_pipeline_execution = in_pipeline_execution_; }
 
     static const String match_helper_prefix;
     static const DataTypePtr match_helper_type;
@@ -458,6 +459,7 @@ private:
     CancellationHook is_cancelled{[]() {
         return false;
     }};
+    bool in_pipeline_execution = false;
 
 private:
     /** Set information about structure of right hand of JOIN (joined data).
