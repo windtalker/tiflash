@@ -44,7 +44,7 @@ namespace ErrorCodes
 extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
 }
 
-UInt8 deep = 8;
+extern UInt8 deep;
 
 struct AndImpl
 {

@@ -18,6 +18,7 @@
 
 namespace DB
 {
+UInt8 deep = 6;
 void registerFunctionsLogical(FunctionFactory & factory)
 {
     factory.registerFunction<FunctionAnd>();
