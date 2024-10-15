@@ -37,20 +37,8 @@ class LogicalOpBench : public benchmark::Fixture
 protected:
     ColumnWithTypeAndName col_not_null_uint8_1;
     ColumnWithTypeAndName col_not_null_uint8_2;
-    ColumnWithTypeAndName col_not_null_uint8_3;
-    ColumnWithTypeAndName col_not_null_uint8_4;
-    ColumnWithTypeAndName col_not_null_uint8_5;
-    ColumnWithTypeAndName col_not_null_uint8_6;
-    ColumnWithTypeAndName col_not_null_uint8_7;
-    ColumnWithTypeAndName col_not_null_uint8_8;
     ColumnWithTypeAndName col_nullable_uint8_1;
     ColumnWithTypeAndName col_nullable_uint8_2;
-    ColumnWithTypeAndName col_nullable_uint8_3;
-    ColumnWithTypeAndName col_nullable_uint8_4;
-    ColumnWithTypeAndName col_nullable_uint8_5;
-    ColumnWithTypeAndName col_nullable_uint8_6;
-    ColumnWithTypeAndName col_nullable_uint8_7;
-    ColumnWithTypeAndName col_nullable_uint8_8;
     ColumnWithTypeAndName col_constant_null;
     ColumnWithTypeAndName col_constant_true;
     ColumnWithTypeAndName col_constant_false;
@@ -68,35 +56,16 @@ public:
         not_null_uint8_columns.push_back(col_not_null_uint8_1);
         col_not_null_uint8_2 = ColumnGenerator::instance().generate(opts);
         not_null_uint8_columns.push_back(col_not_null_uint8_2);
-        col_not_null_uint8_3 = ColumnGenerator::instance().generate(opts);
-        not_null_uint8_columns.push_back(col_not_null_uint8_3);
-        col_not_null_uint8_4 = ColumnGenerator::instance().generate(opts);
-        not_null_uint8_columns.push_back(col_not_null_uint8_4);
-        col_not_null_uint8_5 = ColumnGenerator::instance().generate(opts);
-        not_null_uint8_columns.push_back(col_not_null_uint8_5);
-        col_not_null_uint8_6 = ColumnGenerator::instance().generate(opts);
-        not_null_uint8_columns.push_back(col_not_null_uint8_6);
-        col_not_null_uint8_7 = ColumnGenerator::instance().generate(opts);
-        not_null_uint8_columns.push_back(col_not_null_uint8_7);
-        col_not_null_uint8_8 = ColumnGenerator::instance().generate(opts);
-        not_null_uint8_columns.push_back(col_not_null_uint8_8);
+        for (size_t i = 2; i < 10; ++i)
+            not_null_uint8_columns.push_back(ColumnGenerator::instance().generate(opts));
+
         opts.type_name = "Nullable(UInt8)";
         col_nullable_uint8_1 = ColumnGenerator::instance().generate(opts);
         nullable_uint8_columns.push_back(col_nullable_uint8_1);
         col_nullable_uint8_2 = ColumnGenerator::instance().generate(opts);
         nullable_uint8_columns.push_back(col_nullable_uint8_2);
-        col_nullable_uint8_3 = ColumnGenerator::instance().generate(opts);
-        nullable_uint8_columns.push_back(col_nullable_uint8_3);
-        col_nullable_uint8_4 = ColumnGenerator::instance().generate(opts);
-        nullable_uint8_columns.push_back(col_nullable_uint8_4);
-        col_nullable_uint8_5 = ColumnGenerator::instance().generate(opts);
-        nullable_uint8_columns.push_back(col_nullable_uint8_5);
-        col_nullable_uint8_6 = ColumnGenerator::instance().generate(opts);
-        nullable_uint8_columns.push_back(col_nullable_uint8_6);
-        col_nullable_uint8_7 = ColumnGenerator::instance().generate(opts);
-        nullable_uint8_columns.push_back(col_nullable_uint8_7);
-        col_nullable_uint8_8 = ColumnGenerator::instance().generate(opts);
-        nullable_uint8_columns.push_back(col_nullable_uint8_8);
+        for (size_t i = 2; i < 10; ++i)
+            nullable_uint8_columns.push_back(ColumnGenerator::instance().generate(opts));
         col_constant_null = col_nullable_uint8_1;
         col_constant_true = col_nullable_uint8_1;
         col_constant_false = col_nullable_uint8_1;
@@ -169,31 +138,31 @@ LOGICAL_BENCH(_nullable_uint8_2, _nullable_uint8_1, And);
 LOGICAL_BENCH(_not_null_uint8_2, _nullable_uint8_1, And);
 LOGICAL_BENCH(_not_null_uint8_2, _not_null_uint8_1, And);
 // and
-LOGICAL_BENCH(_not_null_uint8_1, _constant_true, And);
-LOGICAL_BENCH(_not_null_uint8_1, _constant_false, And);
-LOGICAL_BENCH(_not_null_uint8_1, _constant_null, And);
-LOGICAL_BENCH(_nullable_uint8_1, _constant_true, And);
-LOGICAL_BENCH(_nullable_uint8_1, _constant_false, And);
-LOGICAL_BENCH(_nullable_uint8_1, _constant_null, And);
-LOGICAL_BENCH(_nullable_uint8_1, _nullable_uint8_2, And);
-LOGICAL_BENCH(_not_null_uint8_1, _nullable_uint8_2, And);
-LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, And);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_true, And);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_false, And);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_null, And);
+//LOGICAL_BENCH(_nullable_uint8_1, _constant_true, And);
+//LOGICAL_BENCH(_nullable_uint8_1, _constant_false, And);
+//LOGICAL_BENCH(_nullable_uint8_1, _constant_null, And);
+//LOGICAL_BENCH(_nullable_uint8_1, _nullable_uint8_2, And);
+//LOGICAL_BENCH(_not_null_uint8_1, _nullable_uint8_2, And);
+//LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, And);
 
 // or
-LOGICAL_BENCH(_not_null_uint8_1, _constant_true, Or);
-LOGICAL_BENCH(_not_null_uint8_1, _constant_false, Or);
-LOGICAL_BENCH(_not_null_uint8_1, _constant_null, Or);
-LOGICAL_BENCH(_nullable_uint8_1, _constant_true, Or);
-LOGICAL_BENCH(_nullable_uint8_1, _constant_false, Or);
-LOGICAL_BENCH(_nullable_uint8_1, _constant_null, Or);
-LOGICAL_BENCH(_nullable_uint8_1, _nullable_uint8_2, Or);
-LOGICAL_BENCH(_not_null_uint8_1, _nullable_uint8_2, Or);
-LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, Or);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_true, Or);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_false, Or);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_null, Or);
+//LOGICAL_BENCH(_nullable_uint8_1, _constant_true, Or);
+//LOGICAL_BENCH(_nullable_uint8_1, _constant_false, Or);
+//LOGICAL_BENCH(_nullable_uint8_1, _constant_null, Or);
+//LOGICAL_BENCH(_nullable_uint8_1, _nullable_uint8_2, Or);
+//LOGICAL_BENCH(_not_null_uint8_1, _nullable_uint8_2, Or);
+//LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, Or);
 
 // xor
-LOGICAL_BENCH(_not_null_uint8_1, _constant_true, Xor);
-LOGICAL_BENCH(_not_null_uint8_1, _constant_false, Xor);
-LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, Xor);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_true, Xor);
+//LOGICAL_BENCH(_not_null_uint8_1, _constant_false, Xor);
+//LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, Xor);
 
 #define LEGACY_LOGICAL_BENCH_MULTI_PARAM(PARAM_NUM, OP_NAME, NULLABLE)                         \
     BENCHMARK_DEFINE_F(LogicalOpBench, legacyLogicalMultiParam_##OP_NAME##PARAM_NUM##NULLABLE) \
@@ -202,7 +171,7 @@ LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, Xor);
     {                                                                                          \
         FunctionLegacy##OP_NAME function;                                                      \
         ColumnsWithTypeAndName columns;                                                        \
-        if ((PARAM_NUM) > 8)                                                                   \
+        if ((PARAM_NUM) > 10)                                                                  \
             throw Exception("not supported");                                                  \
         ColumnNumbers arguments;                                                               \
         bool result_is_nullable = false;                                                       \
@@ -255,99 +224,140 @@ LOGICAL_BENCH(_not_null_uint8_1, _not_null_uint8_2, Xor);
     CATCH                                                                                      \
     BENCHMARK_REGISTER_F(LogicalOpBench, legacyLogicalMultiParam_##OP_NAME##PARAM_NUM##NULLABLE)->Iterations(1000);
 
-#define OPT_LOGICAL_BENCH_MULTI_PARAM(PARAM_NUM, OP_NAME, NULLABLE)                         \
-    BENCHMARK_DEFINE_F(LogicalOpBench, optLogicalMultiParam_##OP_NAME##PARAM_NUM##NULLABLE) \
-    (benchmark::State & state)                                                              \
-    try                                                                                     \
-    {                                                                                       \
-        Function##OP_NAME function;                                                         \
-        ColumnsWithTypeAndName columns;                                                     \
-        if ((PARAM_NUM) > 8)                                                                \
-            throw Exception("not supported");                                               \
-        ColumnNumbers arguments;                                                            \
-        bool result_is_nullable = false;                                                    \
-        if (strcmp(#NULLABLE, "_nullable") == 0)                                            \
-        {                                                                                   \
-            result_is_nullable = true;                                                      \
-            for (size_t i = 0; i < (PARAM_NUM); ++i)                                        \
-            {                                                                               \
-                columns.push_back(nullable_uint8_columns[i]);                               \
-                arguments.push_back(i);                                                     \
-            }                                                                               \
-        }                                                                                   \
-        else if (strcmp(#NULLABLE, "_not_null") == 0)                                       \
-        {                                                                                   \
-            for (size_t i = 0; i < (PARAM_NUM); ++i)                                        \
-            {                                                                               \
-                columns.push_back(not_null_uint8_columns[i]);                               \
-                arguments.push_back(i);                                                     \
-            }                                                                               \
-        }                                                                                   \
-        else if (strcmp(#NULLABLE, "_mixed") == 0)                                          \
-        {                                                                                   \
-            result_is_nullable = true;                                                      \
-            size_t i = 0;                                                                   \
-            for (; i < (PARAM_NUM) / 2; ++i)                                                \
-            {                                                                               \
-                columns.push_back(nullable_uint8_columns[i]);                               \
-                arguments.push_back(i);                                                     \
-            }                                                                               \
-            for (; i < (PARAM_NUM); ++i)                                                    \
-            {                                                                               \
-                columns.push_back(not_null_uint8_columns[i]);                               \
-                arguments.push_back(i);                                                     \
-            }                                                                               \
-        }                                                                                   \
-        Block input(columns);                                                               \
-        if (result_is_nullable)                                                             \
-            input.insert({nullptr, nullable_result_type, "res"});                           \
-        else                                                                                \
-            input.insert({nullptr, not_null_result_type, "res"});                           \
-        for (auto _ : state)                                                                \
-        {                                                                                   \
-            function.executeImpl(input, arguments, (PARAM_NUM));                            \
-        }                                                                                   \
-    }                                                                                       \
-    CATCH                                                                                   \
-    BENCHMARK_REGISTER_F(LogicalOpBench, optLogicalMultiParam_##OP_NAME##PARAM_NUM##NULLABLE)->Iterations(1000);
+#define OPT_LOGICAL_BENCH_MULTI_PARAM(PARAM_NUM, OP_NAME, NULLABLE, DEEP)                         \
+    BENCHMARK_DEFINE_F(LogicalOpBench, optLogicalMultiParam_##OP_NAME##PARAM_NUM##NULLABLE##DEEP) \
+    (benchmark::State & state)                                                                    \
+    try                                                                                           \
+    {                                                                                             \
+        Function##OP_NAME function;                                                               \
+        ColumnsWithTypeAndName columns;                                                           \
+        deep = (DEEP);                                                                            \
+        if ((PARAM_NUM) > 10)                                                                     \
+            throw Exception("not supported");                                                     \
+        ColumnNumbers arguments;                                                                  \
+        bool result_is_nullable = false;                                                          \
+        if (strcmp(#NULLABLE, "_nullable") == 0)                                                  \
+        {                                                                                         \
+            result_is_nullable = true;                                                            \
+            for (size_t i = 0; i < (PARAM_NUM); ++i)                                              \
+            {                                                                                     \
+                columns.push_back(nullable_uint8_columns[i]);                                     \
+                arguments.push_back(i);                                                           \
+            }                                                                                     \
+        }                                                                                         \
+        else if (strcmp(#NULLABLE, "_not_null") == 0)                                             \
+        {                                                                                         \
+            for (size_t i = 0; i < (PARAM_NUM); ++i)                                              \
+            {                                                                                     \
+                columns.push_back(not_null_uint8_columns[i]);                                     \
+                arguments.push_back(i);                                                           \
+            }                                                                                     \
+        }                                                                                         \
+        else if (strcmp(#NULLABLE, "_mixed") == 0)                                                \
+        {                                                                                         \
+            result_is_nullable = true;                                                            \
+            size_t i = 0;                                                                         \
+            for (; i < (PARAM_NUM) / 2; ++i)                                                      \
+            {                                                                                     \
+                columns.push_back(nullable_uint8_columns[i]);                                     \
+                arguments.push_back(i);                                                           \
+            }                                                                                     \
+            for (; i < (PARAM_NUM); ++i)                                                          \
+            {                                                                                     \
+                columns.push_back(not_null_uint8_columns[i]);                                     \
+                arguments.push_back(i);                                                           \
+            }                                                                                     \
+        }                                                                                         \
+        Block input(columns);                                                                     \
+        if (result_is_nullable)                                                                   \
+            input.insert({nullptr, nullable_result_type, "res"});                                 \
+        else                                                                                      \
+            input.insert({nullptr, not_null_result_type, "res"});                                 \
+        for (auto _ : state)                                                                      \
+        {                                                                                         \
+            function.executeImpl(input, arguments, (PARAM_NUM));                                  \
+        }                                                                                         \
+    }                                                                                             \
+    CATCH                                                                                         \
+    BENCHMARK_REGISTER_F(LogicalOpBench, optLogicalMultiParam_##OP_NAME##PARAM_NUM##NULLABLE##DEEP)->Iterations(1000);
 
 // test and only since in TiDB it always use binary logical op, so or and xor is always binary logical op
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(3, And, _not_null);
-OPT_LOGICAL_BENCH_MULTI_PARAM(3, And, _not_null);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(4, And, _not_null);
-OPT_LOGICAL_BENCH_MULTI_PARAM(4, And, _not_null);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(5, And, _not_null);
-OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _not_null);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(6, And, _not_null);
-OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _not_null);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(7, And, _not_null);
-OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _not_null);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(8, And, _not_null);
-OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _not_null);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(3, And, _mixed);
-OPT_LOGICAL_BENCH_MULTI_PARAM(3, And, _mixed);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(4, And, _mixed);
-OPT_LOGICAL_BENCH_MULTI_PARAM(4, And, _mixed);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(5, And, _mixed);
-OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _mixed);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(6, And, _mixed);
-OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _mixed);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(7, And, _mixed);
-OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _mixed);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(8, And, _mixed);
-OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _mixed);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(3, And, _nullable);
-OPT_LOGICAL_BENCH_MULTI_PARAM(3, And, _nullable);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(4, And, _nullable);
-OPT_LOGICAL_BENCH_MULTI_PARAM(4, And, _nullable);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(5, And, _nullable);
-OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _nullable);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(6, And, _nullable);
-OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _nullable);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(7, And, _nullable);
-OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _nullable);
-LEGACY_LOGICAL_BENCH_MULTI_PARAM(8, And, _nullable);
-OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _nullable);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(3, And, _not_null);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(3, And, _not_null);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(4, And, _not_null);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(4, And, _not_null);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(5, And, _not_null);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _not_null, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _not_null, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _not_null, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _not_null, 4);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(6, And, _not_null);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _not_null, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _not_null, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _not_null, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _not_null, 4);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(7, And, _not_null);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _not_null, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _not_null, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _not_null, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _not_null, 4);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(8, And, _not_null);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _not_null, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _not_null, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _not_null, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _not_null, 4);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _not_null, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _not_null, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _not_null, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _not_null, 4);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _not_null, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _not_null, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _not_null, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _not_null, 4);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(3, And, _mixed);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(3, And, _mixed);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(4, And, _mixed);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(4, And, _mixed);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(5, And, _mixed);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _mixed);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(6, And, _mixed);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _mixed);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(7, And, _mixed);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _mixed);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(8, And, _mixed);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _mixed);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(3, And, _nullable);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(3, And, _nullable);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(4, And, _nullable);
+//OPT_LOGICAL_BENCH_MULTI_PARAM(4, And, _nullable);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(5, And, _nullable);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _nullable, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _nullable, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _nullable, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(5, And, _nullable, 4);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(6, And, _nullable);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _nullable, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _nullable, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _nullable, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(6, And, _nullable, 4);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(7, And, _nullable);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _nullable, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _nullable, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _nullable, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(7, And, _nullable, 4);
+//LEGACY_LOGICAL_BENCH_MULTI_PARAM(8, And, _nullable);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _nullable, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _nullable, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _nullable, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(8, And, _nullable, 4);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _nullable, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _nullable, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _nullable, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(9, And, _nullable, 4);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _nullable, 10);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _nullable, 8);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _nullable, 6);
+OPT_LOGICAL_BENCH_MULTI_PARAM(10, And, _nullable, 4);
 
 } // namespace tests
 } // namespace DB

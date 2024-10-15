@@ -44,6 +44,8 @@ namespace ErrorCodes
 extern const int NUMBER_OF_ARGUMENTS_DOESNT_MATCH;
 }
 
+UInt8 deep = 8;
+
 struct AndImpl
 {
     static constexpr bool isSaturable = true;
@@ -749,9 +751,26 @@ public:
             {
                 while (not_null_uint8_columns.size() > 1)
                 {
+                    switch (deep)
+                    {
+                    case 10:
+                        AssociativeOperationImpl<Impl, 10>::execute(not_null_uint8_columns, vec_res);
+                        break;
+                    case 8:
+                        AssociativeOperationImpl<Impl, 8>::execute(not_null_uint8_columns, vec_res);
+                        break;
+                    case 6:
+                        AssociativeOperationImpl<Impl, 6>::execute(not_null_uint8_columns, vec_res);
+                        break;
+                    case 4:
+                        AssociativeOperationImpl<Impl, 4>::execute(not_null_uint8_columns, vec_res);
+                        break;
+                    default:
+                        throw Exception("not supported");
+                    }
                     /// With a large block size, combining 6 columns per pass is the fastest.
                     /// When small - more, is faster.
-                    AssociativeOperationImpl<Impl, 6>::execute(not_null_uint8_columns, vec_res);
+                    //AssociativeOperationImpl<Impl, 6>::execute(not_null_uint8_columns, vec_res);
                     not_null_uint8_columns.push_back(col_res.get());
                 }
             }
@@ -783,13 +802,46 @@ public:
             {
                 while (nullable_uint8_columns.size() > 1)
                 {
+                    switch (deep)
+                    {
+                    case 10:
+                        NullableAssociativeOperationImpl<Impl, 10>::execute(
+                            nullable_uint8_columns,
+                            null_maps,
+                            vec_res,
+                            vec_res_is_null);
+                        break;
+                    case 8:
+                        NullableAssociativeOperationImpl<Impl, 8>::execute(
+                            nullable_uint8_columns,
+                            null_maps,
+                            vec_res,
+                            vec_res_is_null);
+                        break;
+                    case 6:
+                        NullableAssociativeOperationImpl<Impl, 6>::execute(
+                            nullable_uint8_columns,
+                            null_maps,
+                            vec_res,
+                            vec_res_is_null);
+                        break;
+                    case 4:
+                        NullableAssociativeOperationImpl<Impl, 4>::execute(
+                            nullable_uint8_columns,
+                            null_maps,
+                            vec_res,
+                            vec_res_is_null);
+                        break;
+                    default:
+                        throw Exception("should not reach here");
+                    }
                     /// With a large block size, combining 6 columns per pass is the fastest.
                     /// When small - more, is faster.
-                    NullableAssociativeOperationImpl<Impl, 6>::execute(
-                        nullable_uint8_columns,
-                        null_maps,
-                        vec_res,
-                        vec_res_is_null);
+                    //NullableAssociativeOperationImpl<Impl, 6>::execute(
+                    //    nullable_uint8_columns,
+                    //    null_maps,
+                    //    vec_res,
+                    //    vec_res_is_null);
                     nullable_uint8_columns.push_back(col_res.get());
                     null_maps.push_back(&vec_res_is_null);
                 }
