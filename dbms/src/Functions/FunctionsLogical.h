@@ -290,6 +290,26 @@ struct NullableAssociativeOperationImpl
         }
     }
 
+    static void NO_INLINE
+    execute(UInt8ColumnPtrs & in, std::vector<const UInt8Container *> & null_map_in, UInt8Container & result)
+    {
+        if (N > in.size())
+        {
+            NullableAssociativeOperationImpl<Op, N - 1>::execute(in, null_map_in, result);
+            return;
+        }
+
+        NullableAssociativeOperationImpl<Op, N> operation(in, null_map_in);
+        in.erase(in.end() - N, in.end());
+        null_map_in.erase(null_map_in.end() - N, null_map_in.end());
+
+        size_t n = result.size();
+        for (size_t i = 0; i < n; ++i)
+        {
+            result[i] = operation.applyNotNull(i);
+        }
+    }
+
     const UInt8Container & vec;
     const UInt8Container * null_map;
     NullableAssociativeOperationImpl<Op, N - 1> continuation;
@@ -310,6 +330,12 @@ struct NullableAssociativeOperationImpl
         bool a = static_cast<bool>(vec[i]);
         bool is_null = (*null_map)[i];
         return Op::applyTwoNullable(a, is_null, tmp, tmp_is_null);
+    }
+    inline std::pair<bool, bool> applyNotNull(size_t i) const
+    {
+        bool a = static_cast<bool>(vec[i]);
+        bool is_null = (*null_map)[i];
+        return Op::apply(!is_null && a, continuation.applyNotNull(i));
     }
 };
 
@@ -334,6 +360,20 @@ struct NullableAssociativeOperationImpl<Op, 2>
             std::tie(res[i], res_is_null[i]) = operation.apply(i);
         }
     }
+    static void execute(UInt8ColumnPtrs & in, std::vector<const UInt8Container *> & null_map_in, UInt8Container & res)
+    {
+        if (in.size() <= 1)
+            throw Exception("Logical error: should not reach here");
+        NullableAssociativeOperationImpl<Op, 2> operation(in, null_map_in);
+        in.erase(in.end() - 2, in.end());
+        null_map_in.erase(null_map_in.end() - 2, null_map_in.end());
+
+        size_t n = res.size();
+        for (size_t i = 0; i < n; ++i)
+        {
+            res[i] = operation.applyNotNull(i);
+        }
+    }
 
     const UInt8Container & a;
     const UInt8Container * a_null_map;
@@ -351,6 +391,7 @@ struct NullableAssociativeOperationImpl<Op, 2>
     {
         return Op::applyTwoNullable(a[i], (*a_null_map)[i], b[i], (*b_null_map)[i]);
     }
+    inline bool applyNotNull(size_t i) const { return Op::apply(!(*a_null_map)[i] && a[i], !(*b_null_map)[i] && b[i]); }
 };
 
 template <typename Op>
@@ -382,7 +423,7 @@ struct NullableAssociativeOperationImpl<Op, 1>
  * The behavior of and and or is the same as
  * https://en.wikipedia.org/wiki/Null_(SQL)#Comparisons_with_NULL_and_the_three-valued_logic_(3VL)
  */
-template <typename Impl, typename Name, bool special_impl_for_nulls>
+template <typename Impl, typename Name, bool special_impl_for_nulls, bool null_as_false = false>
 class FunctionAnyArityLogical : public IFunction
 {
 public:
@@ -419,6 +460,14 @@ private:
                 else
                 {
                     const_val = applyVisitor(FieldVisitorConvertToNumber<bool>(), value);
+                }
+            }
+            if constexpr (null_as_false)
+            {
+                if (const_val_is_null)
+                {
+                    const_val_is_null = false;
+                    const_val = false;
                 }
             }
 
@@ -498,7 +547,7 @@ public:
                     ErrorCodes::ILLEGAL_TYPE_OF_ARGUMENT);
         }
 
-        if (has_nullable_input_column)
+        if (!null_as_false && has_nullable_input_column)
             return makeNullable(std::make_shared<DataTypeUInt8>());
         else
             return std::make_shared<DataTypeUInt8>();
@@ -589,11 +638,21 @@ public:
             const auto & col_data = nullable_uint8_columns[0]->getData();
             // according to https://github.com/pingcap/tiflash/issues/5849
             // need to cast the UInt8 column to bool explicitly
-            for (size_t i = 0; i < rows; ++i)
+            if constexpr (null_as_false)
             {
-                vec_res[i] = static_cast<bool>(col_data[i]);
+                for (size_t i = 0; i < rows; ++i)
+                {
+                    vec_res[i] = (*null_maps[0])[i] == 0 && static_cast<bool>(col_data[i]);
+                }
             }
-            vec_res_is_null.assign(*null_maps[0]);
+            else
+            {
+                for (size_t i = 0; i < rows; ++i)
+                {
+                    vec_res[i] = static_cast<bool>(col_data[i]);
+                }
+                vec_res_is_null.assign(*null_maps[0]);
+            }
         }
         if (result_is_nullable)
         {
@@ -681,20 +740,37 @@ public:
                 const auto & col_1 = not_null_uint8_columns[0]->getData();
                 const auto & col_2 = nullable_uint8_columns[0]->getData();
                 const auto & null_map_2 = *null_maps[0];
-                for (size_t i = 0; i < rows; ++i)
+                if constexpr (null_as_false)
                 {
-                    std::tie(vec_res[i], vec_res_is_null[i])
-                        = Impl::applyOneNullable(col_2[i], null_map_2[i], col_1[i]);
+                    for (size_t i = 0; i < rows; ++i)
+                    {
+                        std::tie(vec_res[i], vec_res_is_null[i]) = Impl::apply(!null_map_2[i] && col_2[i], col_1[i]);
+                    }
+                }
+                else
+                {
+                    for (size_t i = 0; i < rows; ++i)
+                    {
+                        std::tie(vec_res[i], vec_res_is_null[i])
+                            = Impl::applyOneNullable(col_2[i], null_map_2[i], col_1[i]);
+                    }
                 }
             }
             else
             {
                 // case 3: 2 nullable
-                NullableAssociativeOperationImpl<Impl, 2>::execute(
-                    nullable_uint8_columns,
-                    null_maps,
-                    vec_res,
-                    vec_res_is_null);
+                if constexpr (null_as_false)
+                {
+                    NullableAssociativeOperationImpl<Impl, 2>::execute(nullable_uint8_columns, null_maps, vec_res);
+                }
+                else
+                {
+                    NullableAssociativeOperationImpl<Impl, 2>::execute(
+                        nullable_uint8_columns,
+                        null_maps,
+                        vec_res,
+                        vec_res_is_null);
+                }
             }
         }
         if (result_is_nullable)
@@ -772,24 +848,47 @@ public:
                 const auto & col_data = nullable_uint8_columns[0]->getData();
                 // according to https://github.com/pingcap/tiflash/issues/5849
                 // need to cast the UInt8 column to bool explicitly
-                for (size_t i = 0; i < rows; ++i)
+                if constexpr (null_as_false)
                 {
-                    vec_res[i] = static_cast<bool>(col_data[i]);
+                    for (size_t i = 0; i < rows; ++i)
+                    {
+                        vec_res[i] = !(*null_maps[0])[i] && col_data[i];
+                    }
                 }
-                vec_res_is_null.assign(*null_maps[0]);
+                else
+                {
+                    for (size_t i = 0; i < rows; ++i)
+                    {
+                        vec_res[i] = static_cast<bool>(col_data[i]);
+                    }
+                    vec_res_is_null.assign(*null_maps[0]);
+                }
             }
             else
             {
-                while (nullable_uint8_columns.size() > 1)
+                if constexpr (null_as_false)
                 {
-                    // micro benchmark shows 4 << 6, 8 outperforms 6 slightly, and performance may decline when set to 10
-                    NullableAssociativeOperationImpl<Impl, 8>::execute(
-                        nullable_uint8_columns,
-                        null_maps,
-                        vec_res,
-                        vec_res_is_null);
-                    nullable_uint8_columns.push_back(col_res.get());
-                    null_maps.push_back(&vec_res_is_null);
+                    while (nullable_uint8_columns.size() > 1)
+                    {
+                        // micro benchmark shows 4 << 6, 8 outperforms 6 slightly, and performance may decline when set to 10
+                        NullableAssociativeOperationImpl<Impl, 8>::execute(nullable_uint8_columns, null_maps, vec_res);
+                        nullable_uint8_columns.push_back(col_res.get());
+                        null_maps.push_back(&vec_res_is_null);
+                    }
+                }
+                else
+                {
+                    while (nullable_uint8_columns.size() > 1)
+                    {
+                        // micro benchmark shows 4 << 6, 8 outperforms 6 slightly, and performance may decline when set to 10
+                        NullableAssociativeOperationImpl<Impl, 8>::execute(
+                            nullable_uint8_columns,
+                            null_maps,
+                            vec_res,
+                            vec_res_is_null);
+                        nullable_uint8_columns.push_back(col_res.get());
+                        null_maps.push_back(&vec_res_is_null);
+                    }
                 }
             }
         }
@@ -881,6 +980,9 @@ public:
             in[i] = block.getByPosition(arguments[i]).column.get();
 
         size_t rows = in[0]->size();
+        bool res_is_nullable = has_nullable_input_column;
+        if constexpr (null_as_false)
+            res_is_nullable = false;
 
         /// Combine all constant columns into a single value.
         UInt8 const_val = 0;
@@ -896,7 +998,7 @@ public:
                     const_val,
                     const_val_is_null,
                     !in.empty(),
-                    has_nullable_input_column))
+                    res_is_nullable))
                 return;
         }
 
@@ -927,7 +1029,7 @@ public:
                 not_null_uint8_columns,
                 nullable_uint8_columns,
                 null_maps,
-                has_nullable_input_column);
+                res_is_nullable);
         }
         else if (in.size() + static_cast<UInt8>(has_consts) == 2)
         {
@@ -942,7 +1044,7 @@ public:
                 not_null_uint8_columns,
                 nullable_uint8_columns,
                 null_maps,
-                has_nullable_input_column);
+                res_is_nullable);
         }
         else
         {
@@ -957,7 +1059,7 @@ public:
                 not_null_uint8_columns,
                 nullable_uint8_columns,
                 null_maps,
-                has_nullable_input_column);
+                res_is_nullable);
         }
     }
 };
@@ -1021,12 +1123,14 @@ public:
 
 // clang-format off
 struct NameAnd { static constexpr auto name = "and"; };
+struct NameAnd2Value { static constexpr auto name = "and_2_value"; };
 struct NameOr { static constexpr auto name = "or"; };
 struct NameXor { static constexpr auto name = "xor"; };
 struct NameNot { static constexpr auto name = "not"; };
 // clang-format on
 
 using FunctionAnd = FunctionAnyArityLogical<AndImpl, NameAnd, true>;
+using FunctionAnd2Value = FunctionAnyArityLogical<AndImpl, NameAnd2Value, true>;
 using FunctionOr = FunctionAnyArityLogical<OrImpl, NameOr, true>;
 using FunctionXor = FunctionAnyArityLogical<XorImpl, NameXor, false>;
 using FunctionNot = FunctionUnaryLogical<NotImpl, NameNot>;
