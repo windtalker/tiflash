@@ -160,12 +160,18 @@ protected:
     std::unique_ptr<Limiter<grpc::Status>> cop_limiter, cop_stream_limiter, batch_cop_limiter;
 };
 
-class AsyncFlashService final : public tikvpb::Tikv::WithAsyncMethod_EstablishMPPConnection<FlashService>
+class AsyncFlashService : public tikvpb::Tikv::WithAsyncMethod_EstablishMPPConnection<FlashService>
 {
 public:
     AsyncFlashService() { is_async = true; }
     /// Return grpc::Status::OK when the connection is established.
     /// Return non-OK grpc::Status when the connection can not be established.
     grpc::Status establishMPPConnectionAsync(EstablishCallData * call_data);
+};
+
+class AsyncFlashServiceV2
+    : public tikvpb::Tikv::WithAsyncMethod_BatchCoprocessor<
+          tikvpb::Tikv::WithAsyncMethod_CoprocessorStream<AsyncFlashService>>
+{
 };
 } // namespace DB

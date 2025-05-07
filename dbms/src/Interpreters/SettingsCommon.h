@@ -381,6 +381,40 @@ private:
     UInt64OrDouble value;
 };
 
+struct SettingVersion
+{
+public:
+    bool changed = false;
+
+    using UInt64OrBool = std::variant<UInt64, bool>;
+    struct ToStringVisitor;
+
+    explicit SettingVersion(UInt64 version = 0)
+        : value(version)
+    {}
+    explicit SettingVersion(bool version = false)
+        : value(version)
+    {}
+
+    SettingVersion(const SettingVersion & setting);
+    SettingVersion & operator=(UInt64OrBool x);
+    SettingVersion & operator=(const SettingVersion & setting);
+
+    void set(UInt64OrBool x);
+    void set(UInt64 x);
+    void set(bool x);
+    void set(const Field & x);
+    void set(const String & x);
+    void set(ReadBuffer & buf);
+
+    String toString() const;
+    void write(WriteBuffer & buf) const;
+    UInt64 get() const;
+
+private:
+    UInt64 value;
+};
+
 struct SettingDouble
 {
 public:

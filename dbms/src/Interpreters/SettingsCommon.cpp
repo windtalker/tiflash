@@ -15,6 +15,9 @@
 #include <Interpreters/SettingsCommon.h>
 
 #include <magic_enum.hpp>
+#include <variant>
+
+#include "common/types.h"
 
 namespace DB
 {
@@ -227,6 +230,61 @@ UInt64 SettingMemoryLimit::getActualBytes(UInt64 total_ram) const
             }
         },
         get());
+}
+
+SettingVersion::SettingVersion(const SettingVersion & setting)
+{
+    value = setting.value;
+}
+
+SettingVersion & SettingVersion::operator=(UInt64OrBool x)
+{
+    set(x);
+    return *this;
+}
+
+SettingVersion & SettingVersion::operator=(const SettingVersion & setting)
+{
+    set(setting.value);
+    return *this;
+}
+
+void SettingVersion::set(UInt64OrBool x)
+{
+    value = std::visit(
+        [&](auto && arg) -> UInt64 {
+            using T = std::decay_t<decltype(arg)>;
+            if constexpr (std::is_same_v<T, UInt64>)
+            {
+                return arg;
+            }
+            else if constexpr (std::is_same_v<T, bool>)
+            {
+                return arg ? 1 : 0;
+            }
+        },
+        x);
+    changed = true;
+}
+
+void SettingVersion::set(UInt64 x)
+{
+    value = x;
+    changed = true;
+}
+
+void SettingVersion::set(bool x)
+{
+    value = x ? 1 : 0;
+    changed = true;
+}
+
+void SettingVersion::set(const Field & x)
+{
+    if (x.getType() == Field::Types::String)
+        set(safeGet<const String &>(x));
+    else
+        set(safeGet<UInt64>(x));
 }
 
 } // namespace DB
