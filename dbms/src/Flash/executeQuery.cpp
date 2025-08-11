@@ -152,6 +152,12 @@ std::optional<QueryExecutorPtr> executeAsPipeline(Context & context, bool intern
 
     /// query level memory tracker
     auto memory_tracker = prepareQueryLevelMemoryTracker(context, dag_context, internal);
+    if (dag_context.isMPPTask())
+    {
+        // for mpp task, create a task level memory tracker
+        auto task_memory_tracker = dag_context.createTaskMemoryTracker(memory_tracker.get());
+        memory_tracker = task_memory_tracker;
+    }
 
     FAIL_POINT_TRIGGER_EXCEPTION(FailPoints::random_interpreter_failpoint);
     std::unique_ptr<PipelineExecutor> executor;

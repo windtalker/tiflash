@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include "Common/MemoryTracker.h"
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #ifdef __clang__
@@ -359,8 +360,18 @@ public:
 
     MPPReceiverSetPtr getMPPReceiverSet() const { return mpp_receiver_set; }
 
+    MemoryTrackerPtr createTaskMemoryTracker(MemoryTracker * parent)
+    {
+        if (task_memory_tracker != nullptr)
+            return task_memory_tracker;
+        task_memory_tracker = MemoryTracker::create(0, parent);
+        task_memory_tracker->setDescription("For Mpp task");
+        return task_memory_tracker;
+    }
+
 public:
     DAGRequest dag_request;
+    MemoryTrackerPtr task_memory_tracker;
     /// Some existing code inherited from Clickhouse assume that each query must have a valid query string and query ast,
     /// dummy_query_string and dummy_ast is used for that
     String dummy_query_string;
