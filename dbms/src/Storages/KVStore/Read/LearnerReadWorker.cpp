@@ -26,23 +26,30 @@
 namespace DB
 {
 
-void UnavailableRegions::tryThrowRegionException()
+void UnavailableAndLockRegions::tryThrowRegionException()
 {
     // For batch-cop request (not handled by disagg write node), all unavailable regions, include the ones with lock exception, should be collected and retry next round.
     // For normal cop request, which only contains one region, LockException should be thrown directly and let upper layer (like client-c, tidb, tispark) handle it.
     // For batch-cop request (handled by disagg write node), LockException should be thrown directly and let upper layer (disagg read node) handle it.
 
+    // for disagg write node request, throw LockException directly
     if (is_wn_disagg_read && !region_locks.empty())
         throw LockException(std::move(region_locks));
 
+    // for cop request, throw LockException directly
     if (!batch_cop && !region_locks.empty())
         throw LockException(std::move(region_locks));
 
-    if (!ids.empty())
-        throw RegionException(std::move(ids), status, extra_msg.c_str());
+    if (!empty())
+        throw RegionException(
+            std::move(unavailable_region_ids),
+            std::move(lock_region_ids),
+            std::move(locks),
+            status,
+            extra_msg.c_str());
 }
 
-void UnavailableRegions::addRegionWaitIndexTimeout(
+void UnavailableAndLockRegions::addRegionWaitIndexTimeout(
     const RegionID region_id,
     UInt64 index_to_wait,
     UInt64 current_applied_index)
@@ -75,7 +82,7 @@ LearnerReadWorker::LearnerReadWorker(
     , tmt(tmt_)
     , kvstore(tmt.getKVStore())
     , log(log_)
-    , unavailable_regions(for_batch_cop, is_wn_disagg_read)
+    , unavailable_and_lock_regions(for_batch_cop, is_wn_disagg_read)
 {
     assert(log != nullptr);
     stats.num_regions = mvcc_query_info.regions_query_info.size();
@@ -292,12 +299,15 @@ void LearnerReadWorker::recordReadIndexError(
                 GET_METRIC(tiflash_raft_learner_read_failures_count, type_other).Increment();
                 LOG_DEBUG(log, "meet abnormal region error {}, [region_id={}]", resp.ShortDebugString(), region_id);
             }
-            unavailable_regions.addStatus(region_id, region_status, std::move(extra_msg));
+            unavailable_and_lock_regions.addStatus(region_id, region_status, std::move(extra_msg));
         }
         else if (resp.has_locked())
         {
             GET_METRIC(tiflash_raft_learner_read_failures_count, type_tikv_lock).Increment();
-            unavailable_regions.addRegionLock(region_id, LockInfoPtr(resp.release_locked()));
+            // if read index meet lock, treated as unavailable region since we can not do wait index on this region.
+            unavailable_and_lock_regions.addRegionLockAsUnavailableRegion(
+                region_id,
+                LockInfoPtr(resp.release_locked()));
         }
         else
         {
@@ -334,7 +344,8 @@ RegionsReadIndexResult LearnerReadWorker::readIndex(
     GET_METRIC(tiflash_raft_read_index_duration_seconds).Observe(stats.read_index_elapsed_ms / 1000.0);
     recordReadIndexError(regions_snapshot, batch_read_index_result);
 
-    const auto log_lvl = unavailable_regions.empty() ? Poco::Message::PRIO_DEBUG : Poco::Message::PRIO_INFORMATION;
+    const auto log_lvl
+        = unavailable_and_lock_regions.empty() ? Poco::Message::PRIO_DEBUG : Poco::Message::PRIO_INFORMATION;
     LOG_IMPL(
         log,
         log_lvl,
@@ -344,7 +355,7 @@ RegionsReadIndexResult LearnerReadWorker::readIndex(
         stats.num_read_index_request,
         stats.num_stale_read,
         stats.num_cached_read_index,
-        unavailable_regions.size(),
+        unavailable_and_lock_regions.size(),
         stats.read_index_elapsed_ms,
         mvcc_query_info.start_ts);
 
@@ -361,7 +372,7 @@ void LearnerReadWorker::waitIndex(
     for (const auto & region_to_query : regions_info)
     {
         // if region is unavailable, skip wait index.
-        if (unavailable_regions.contains(region_to_query.region_id))
+        if (unavailable_and_lock_regions.unavailableRegionContains(region_to_query.region_id))
             continue;
 
         const auto & region = regions_snapshot.find(region_to_query.region_id)->second;
@@ -377,7 +388,10 @@ void LearnerReadWorker::waitIndex(
             if (!region->checkIndex(index_to_wait))
             {
                 auto current = region->appliedIndex();
-                unavailable_regions.addRegionWaitIndexTimeout(region_to_query.region_id, index_to_wait, current);
+                unavailable_and_lock_regions.addRegionWaitIndexTimeout(
+                    region_to_query.region_id,
+                    index_to_wait,
+                    current);
             }
             continue; // timeout happens, check next region quickly
         }
@@ -392,7 +406,7 @@ void LearnerReadWorker::waitIndex(
         if (wait_res != WaitIndexStatus::Finished)
         {
             auto current = region->appliedIndex();
-            unavailable_regions.addRegionWaitIndexTimeout(region_to_query.region_id, index_to_wait, current);
+            unavailable_and_lock_regions.addRegionWaitIndexTimeout(region_to_query.region_id, index_to_wait, current);
             continue; // error or timeout happens, check next region quickly
         }
 
@@ -418,7 +432,9 @@ void LearnerReadWorker::waitIndex(
 
         std::visit(
             variant_op::overloaded{
-                [&](LockInfoPtr & lock) { unavailable_regions.addRegionLock(region->id(), std::move(lock)); },
+                [&](std::vector<LockInfoPtr> & locks) {
+                    unavailable_and_lock_regions.addRegionLocks(region->id(), locks);
+                },
                 [&](RegionException::RegionReadStatus & status) {
                     if (status != RegionException::RegionReadStatus::OK)
                     {
@@ -429,7 +445,7 @@ void LearnerReadWorker::waitIndex(
                             region_to_query.version,
                             RecordKVFormat::DecodedTiKVKeyRangeToDebugString(region_to_query.range_in_table),
                             magic_enum::enum_name(status));
-                        unavailable_regions.addStatus(region->id(), status, "resolveLock");
+                        unavailable_and_lock_regions.addStatus(region->id(), status, "resolveLock");
                     }
                 },
             },
@@ -437,14 +453,15 @@ void LearnerReadWorker::waitIndex(
     } // wait index for next region
 
     stats.wait_index_elapsed_ms = watch.elapsedMilliseconds();
-    const auto log_lvl = unavailable_regions.empty() ? Poco::Message::PRIO_DEBUG : Poco::Message::PRIO_INFORMATION;
+    const auto log_lvl
+        = unavailable_and_lock_regions.empty() ? Poco::Message::PRIO_DEBUG : Poco::Message::PRIO_INFORMATION;
     LOG_IMPL(
         log,
         log_lvl,
         "[Learner Read] Finish wait index and resolve locks, wait_cost={}ms n_regions={} n_unavailable={}, start_ts={}",
         stats.wait_index_elapsed_ms,
         stats.num_regions,
-        unavailable_regions.size(),
+        unavailable_and_lock_regions.size(),
         mvcc_query_info.start_ts);
 
     auto bypass_formatter = [](const RegionQueryInfo & query_info) -> String {
@@ -483,7 +500,7 @@ void LearnerReadWorker::waitIndex(
         log,
         "[Learner Read] Learner Read Summary, regions_info={}, unavailable_regions_info={}, start_ts={}",
         region_info_formatter(),
-        unavailable_regions.toDebugString(),
+        unavailable_and_lock_regions.toDebugString(),
         mvcc_query_info.start_ts);
 }
 
@@ -504,19 +521,8 @@ LearnerReadWorker::waitUntilDataAvailable(
     const auto time_elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(end_time - start_time).count();
     GET_METRIC(tiflash_syncing_data_freshness).Observe(time_elapsed_ms / 1000.0); // For DBaaS SLI
 
-    // TODO should we try throw immediately after readIndex?
-    // Throw Region exception if there are any unavailable regions, the exception will be handled in the
-    // following methods
-    // - `CoprocessorHandler::execute`
-    // - `FlashService::EstablishDisaggTask`
-    // - `DAGDriver::execute`
-    // - `DAGStorageInterpreter::doBatchCopLearnerRead`
-    // - `DAGStorageInterpreter::buildLocalStreamsForPhysicalTable`
-    // - `DAGStorageInterpreter::buildLocalExecForPhysicalTable`
-    unavailable_regions.tryThrowRegionException();
-
     // Use info level if read wait index run slow or any unavailable region exists
-    const auto log_lvl = (time_elapsed_ms > 1000 || !unavailable_regions.empty()) //
+    const auto log_lvl = (time_elapsed_ms > 1000 || !unavailable_and_lock_regions.empty()) //
         ? Poco::Message::PRIO_INFORMATION
         : Poco::Message::PRIO_DEBUG;
     LOG_IMPL(
@@ -529,8 +535,9 @@ LearnerReadWorker::waitUntilDataAvailable(
         stats.wait_index_elapsed_ms,
         stats.num_regions,
         stats.num_stale_read,
-        unavailable_regions.size(),
+        unavailable_and_lock_regions.size(),
         mvcc_query_info.start_ts);
+
     return {start_time, end_time};
 }
 

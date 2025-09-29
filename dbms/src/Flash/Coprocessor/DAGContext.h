@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <mutex>
 #include <unordered_map>
+#include <unordered_set>
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #ifdef __clang__
@@ -428,6 +429,13 @@ public:
         this->source_ctes.insert(std::make_pair(cte_id, cte));
     }
 
+    std::unordered_set<UInt64> & getBypassLockTs() { return *bypass_lock_ts; }
+
+    void setBypassLockTs(std::unique_ptr<std::unordered_set<UInt64>> && bypass_lock_ts_)
+    {
+        bypass_lock_ts = std::move(bypass_lock_ts_);
+    }
+
 public:
     DAGRequest dag_request;
     /// Some existing code inherited from Clickhouse assume that each query must have a valid query string and query ast,
@@ -551,6 +559,8 @@ private:
     std::mutex cte_mu;
     std::shared_ptr<CTE> sink_cte;
     std::unordered_map<size_t, std::shared_ptr<CTE>> source_ctes;
+
+    std::unique_ptr<std::unordered_set<UInt64>> bypass_lock_ts;
 };
 
 } // namespace DB

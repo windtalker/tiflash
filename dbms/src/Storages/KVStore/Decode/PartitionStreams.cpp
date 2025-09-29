@@ -264,7 +264,7 @@ DM::WriteResult writeRegionDataToStorage(
 }
 
 
-std::variant<LockInfoPtr, RegionException::RegionReadStatus> RegionTable::checkRegionAndGetLocks(
+std::variant<std::vector<LockInfoPtr>, RegionException::RegionReadStatus> RegionTable::checkRegionAndGetLocks(
     const TiDB::TableID table_id,
     const RegionPtr & region,
     const Timestamp start_ts,
@@ -300,9 +300,9 @@ std::variant<LockInfoPtr, RegionException::RegionReadStatus> RegionTable::checkR
 
     auto scanner = region->createCommittedScanner(true, /*need_data_value*/ false);
     /// Get transaction locks that should be resolved in this region.
-    auto lock_info = scanner.getLockInfo(RegionLockReadQuery{.read_tso = start_ts, .bypass_lock_ts = bypass_lock_ts});
-    if (lock_info)
-        return lock_info;
+    auto lock_infos = scanner.getLockInfos(RegionLockReadQuery{.read_tso = start_ts, .bypass_lock_ts = bypass_lock_ts});
+    if (!lock_infos.empty())
+        return lock_infos;
     return RegionException::RegionReadStatus::OK;
 }
 

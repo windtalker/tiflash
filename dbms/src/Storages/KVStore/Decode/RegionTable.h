@@ -120,7 +120,7 @@ public:
         bool lock_region = true);
 
     /// Check region metas and get transaction locks in region.
-    static std::variant<LockInfoPtr, RegionException::RegionReadStatus> checkRegionAndGetLocks(
+    static std::variant<std::vector<LockInfoPtr>, RegionException::RegionReadStatus> checkRegionAndGetLocks(
         const TableID table_id,
         const RegionPtr & region,
         const Timestamp start_ts,

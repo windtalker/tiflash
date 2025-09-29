@@ -16,8 +16,12 @@
 
 #include <Common/Exception.h>
 #include <Storages/KVStore/Types.h>
+#include <pingcap/kv/LockResolver.h>
 
 #include <magic_enum.hpp>
+#include <memory>
+#include <unordered_map>
+#include <unordered_set>
 
 namespace DB
 {
@@ -51,8 +55,23 @@ public:
         , status(status_)
     {}
 
+    RegionException(
+        UnavailableRegions && unavailable_region_,
+        UnavailableRegions && lock_region_,
+        std::unordered_map<UInt64, std::shared_ptr<pingcap::kv::Lock>> && locks_,
+        RegionReadStatus status_,
+        const char * extra_msg)
+        : Exception(fmt::format("Region error {}({})", magic_enum::enum_name(status_), extra_msg ? extra_msg : ""))
+        , unavailable_region(std::move(unavailable_region_))
+        , lock_region(std::move(lock_region_))
+        , locks(std::move(locks_))
+        , status(status_)
+    {}
+
     /// Region could be found with correct epoch, but unavailable (e.g. its lease in proxy has not been built with leader).
     UnavailableRegions unavailable_region;
+    UnavailableRegions lock_region;
+    std::unordered_map<UInt64, std::shared_ptr<pingcap::kv::Lock>> locks;
     RegionReadStatus status;
 };
 

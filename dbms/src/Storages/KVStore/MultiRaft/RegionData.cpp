@@ -211,8 +211,9 @@ std::optional<RegionDataReadInfo> RegionData::readDataByWriteIt(
     return RegionDataReadInfo{pk, decoded_val.write_type, ts, decoded_val.short_value};
 }
 
-LockInfoPtr RegionData::getLockInfo(const RegionLockReadQuery & query) const
+std::vector<LockInfoPtr> RegionData::getLockInfos(const RegionLockReadQuery & query) const
 {
+    std::vector<LockInfoPtr> res;
     for (const auto & [pk, value] : lock_cf.getData())
     {
         std::ignore = pk;
@@ -224,11 +225,11 @@ LockInfoPtr RegionData::getLockInfo(const RegionLockReadQuery & query) const
 
         if (auto t = lock_info_raw.getLockInfoPtr(query); t != nullptr)
         {
-            return t;
+            res.push_back(std::move(t));
         }
     }
 
-    return nullptr;
+    return res;
 }
 
 std::shared_ptr<const TiKVValue> RegionData::getLockByKey(const TiKVKey & key) const

@@ -63,10 +63,26 @@ LearnerReadSnapshot doLearnerRead(
     if (auto * dag_context = context.getDAGContext())
     {
         mvcc_query_info.scan_context->num_stale_read = worker.getStats().num_stale_read;
-        dag_context->has_read_wait_index = true;
-        dag_context->read_wait_index_start_timestamp = start_time;
+        if (!dag_context->has_read_wait_index)
+        {
+            // doLearnerRead will be retried by its caller, update start_timestamp only for the first time
+            dag_context->has_read_wait_index = true;
+            dag_context->read_wait_index_start_timestamp = start_time;
+        }
+        // always update end_timestamp to the latest time
         dag_context->read_wait_index_end_timestamp = end_time;
     }
+
+    // TODO should we try throw immediately after readIndex?
+    // Throw Region exception if there are any unavailable regions, the exception will be handled in the
+    // following methods
+    // - `CoprocessorHandler::execute`
+    // - `FlashService::EstablishDisaggTask`
+    // - `DAGDriver::execute`
+    // - `DAGStorageInterpreter::doBatchCopLearnerRead`
+    // - `DAGStorageInterpreter::buildLocalStreamsForPhysicalTable`
+    // - `DAGStorageInterpreter::buildLocalExecForPhysicalTable`
+    worker.tryThrowRegionException();
 
     return regions_snapshot;
 }

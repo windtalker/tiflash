@@ -30,6 +30,8 @@
 #include <TiDB/Schema/SchemaSyncer.h>
 
 #include <ext/scope_guard.h>
+#include <memory>
+#include <unordered_set>
 
 namespace DB
 {
@@ -143,9 +145,10 @@ grpc::Status CoprocessorHandler<is_stream>::execute()
             }
 #endif
 
-            const std::unordered_set<UInt64> bypass_lock_ts(
-                cop_context.kv_context.resolved_locks().begin(),
-                cop_context.kv_context.resolved_locks().end());
+            std::unique_ptr<std::unordered_set<UInt64>> bypass_lock_ts = std::make_unique<std::unordered_set<UInt64>>();
+            bypass_lock_ts->insert(
+                cop_request->context().resolved_locks().begin(),
+                cop_request->context().resolved_locks().end());
             table_regions_info.local_regions.emplace(
                 cop_context.kv_context.region_id(),
                 RegionInfo(
@@ -153,7 +156,7 @@ grpc::Status CoprocessorHandler<is_stream>::execute()
                     cop_context.kv_context.region_epoch().version(),
                     cop_context.kv_context.region_epoch().conf_ver(),
                     genCopKeyRange(cop_request->ranges()),
-                    &bypass_lock_ts));
+                    bypass_lock_ts.get()));
 
             DAGRequestKind kind;
             if constexpr (is_stream)
@@ -172,6 +175,8 @@ grpc::Status CoprocessorHandler<is_stream>::execute()
                 cop_request->connection_alias(),
                 Logger::get(log->identifier()));
             cop_context.db_context.setDAGContext(&dag_context);
+
+            dag_context.setBypassLockTs(std::move(bypass_lock_ts));
 
             if constexpr (is_stream)
             {

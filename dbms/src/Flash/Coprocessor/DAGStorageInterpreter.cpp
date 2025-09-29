@@ -62,6 +62,8 @@
 #include <kvproto/coprocessor.pb.h>
 #include <tipb/select.pb.h>
 
+#include <cassert>
+
 #if ENABLE_CLARA
 #include <Storages/DeltaMerge/Index/FullTextIndex/Stream/Ctx.h>
 #endif
@@ -858,6 +860,7 @@ LearnerReadSnapshot DAGStorageInterpreter::doBatchCopLearnerRead()
     if (regions_for_local_read.empty())
         return {};
     std::unordered_set<RegionID> force_retry;
+    bool should_try_bypass_locks = true;
     for (;;)
     {
         try
@@ -886,6 +889,7 @@ LearnerReadSnapshot DAGStorageInterpreter::doBatchCopLearnerRead()
 
             // We can also use current thread to resolve lock, but it will block next process.
             // So, force this region retry in another thread in CoprocessorBlockInputStream.
+            // actually for batch cop/mpp in non-disaggregated mode, the code should not be reached here,
             for (const auto & lock : e.locks)
                 force_retry.emplace(lock.first);
         }
@@ -901,6 +905,32 @@ LearnerReadSnapshot DAGStorageInterpreter::doBatchCopLearnerRead()
             // By now, RegionException will contain all region id of MvccQueryInfo, which is needed by CHSpark.
             // When meeting RegionException, we can let MakeRegionQueryInfos to check in next loop.
             force_retry.insert(e.unavailable_region.begin(), e.unavailable_region.end());
+            if (!e.lock_region.empty())
+            {
+                // regions with lock
+                if (!should_try_bypass_locks)
+                {
+                    force_retry.insert(e.lock_region.begin(), e.lock_region.end());
+                }
+                else
+                {
+                    // only try bypass locks once
+                    should_try_bypass_locks = false;
+                    // Try to bypass locks.
+                    pingcap::kv::Backoffer bo(pingcap::kv::copNextMaxBackoff);
+                    std::vector<uint64_t> bypass_lock_ts;
+                    std::vector<pingcap::kv::LockPtr> locks(e.locks.size());
+                    for (const auto & lock_info : e.locks)
+                        locks.emplace_back(lock_info.second);
+                    auto * cluster = context.getTMTContext().getKVCluster();
+                    cluster->lock_resolver
+                        ->getBypassLockTs(bo, context.getSettingsRef().read_tso, locks, bypass_lock_ts);
+                    if (!bypass_lock_ts.empty())
+                    {
+                        context.getDAGContext()->getBypassLockTs().insert(bypass_lock_ts.begin(), bypass_lock_ts.end());
+                    }
+                }
+            }
         }
         catch (DB::Exception & e)
         {
@@ -1118,6 +1148,8 @@ DM::Remote::DisaggPhysicalTableReadSnapshotPtr DAGStorageInterpreter::buildLocal
         }
         catch (RegionException & e)
         {
+            // there must be no lock region at this stage
+            assert(e.lock_region.empty() && e.locks.empty());
             query_info.mvcc_query_info->scan_context->total_local_region_num -= e.unavailable_region.size();
             /// Recover from region exception for batchCop/MPP
             if (dag_context.isBatchCop() || dag_context.isMPPTask())

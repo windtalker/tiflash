@@ -54,9 +54,9 @@ std::optional<RegionDataReadInfo> Region::readDataByWriteIt(
     }
 }
 
-LockInfoPtr Region::getLockInfo(const RegionLockReadQuery & query) const
+std::vector<LockInfoPtr> Region::getLockInfos(const RegionLockReadQuery & query) const
 {
-    return data.getLockInfo(query);
+    return data.getLockInfos(query);
 }
 
 void Region::insertDebug(const std::string & cf, TiKVKey && key, TiKVValue && value, DupCheck mode)

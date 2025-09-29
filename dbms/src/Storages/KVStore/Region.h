@@ -79,7 +79,10 @@ public:
         bool hasNext();
         RegionDataReadInfo next();
 
-        RegionData::LockInfoPtr getLockInfo(const RegionLockReadQuery & query) { return region->getLockInfo(query); }
+        std::vector<RegionData::LockInfoPtr> getLockInfos(const RegionLockReadQuery & query)
+        {
+            return region->getLockInfos(query);
+        }
 
         size_t writeMapSize() const { return write_map_size; }
 
@@ -315,7 +318,7 @@ private:
         bool hard_error);
     RegionData::WriteCFIter removeDataByWriteIt(const RegionData::WriteCFIter & write_it);
 
-    RegionData::LockInfoPtr getLockInfo(const RegionLockReadQuery & query) const;
+    std::vector<RegionData::LockInfoPtr> getLockInfos(const RegionLockReadQuery & query) const;
 
     RegionPtr splitInto(RegionMeta && meta);
     void setPeerState(raft_serverpb::PeerState state);
