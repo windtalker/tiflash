@@ -65,16 +65,21 @@ struct UnavailableAndLockRegions
 
     void addRegionLocks(RegionID region_id_, std::vector<LockInfoPtr> & input_region_locks)
     {
-        for (size_t i = 0; i < region_locks.size(); i++)
+        for (auto & input_region_lock : input_region_locks)
         {
-            if (!locks.contains(input_region_locks[i]->lock_version()))
+            if (!locks.contains(input_region_lock->lock_version()))
             {
-                // if the lock with same version already exists, we don't need to add it again.
                 locks.emplace(
-                    input_region_locks[i]->lock_version(),
-                    std::make_shared<pingcap::kv::Lock>(*input_region_locks[i]));
+                    input_region_lock->lock_version(),
+                    std::vector<std::shared_ptr<pingcap::kv::Lock>>{
+                        std::make_shared<pingcap::kv::Lock>(*input_region_lock)});
             }
-            region_locks.emplace_back(region_id_, std::move(input_region_locks[i]));
+            else
+            {
+                locks.at(input_region_lock->lock_version())
+                    .push_back(std::make_shared<pingcap::kv::Lock>(*input_region_lock));
+            }
+            region_locks.emplace_back(region_id_, std::move(input_region_lock));
         }
         lock_region_ids.emplace(region_id_);
     }
@@ -122,7 +127,7 @@ private:
     RegionException::UnavailableRegions unavailable_region_ids;
     RegionException::UnavailableRegions lock_region_ids;
     std::vector<std::pair<RegionID, LockInfoPtr>> region_locks;
-    std::unordered_map<UInt64, std::shared_ptr<pingcap::kv::Lock>> locks;
+    std::unordered_map<UInt64, std::vector<std::shared_ptr<pingcap::kv::Lock>>> locks;
     RegionException::RegionReadStatus status{RegionException::RegionReadStatus::NOT_FOUND};
     std::string extra_msg;
 };

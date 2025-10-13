@@ -919,12 +919,9 @@ LearnerReadSnapshot DAGStorageInterpreter::doBatchCopLearnerRead()
                     // Try to bypass locks.
                     pingcap::kv::Backoffer bo(pingcap::kv::copNextMaxBackoff);
                     std::vector<uint64_t> bypass_lock_ts;
-                    std::vector<pingcap::kv::LockPtr> locks(e.locks.size());
-                    for (const auto & lock_info : e.locks)
-                        locks.emplace_back(lock_info.second);
                     auto * cluster = context.getTMTContext().getKVCluster();
                     cluster->lock_resolver
-                        ->getBypassLockTs(bo, context.getSettingsRef().read_tso, locks, bypass_lock_ts);
+                        ->getBypassLockTs(bo, context.getSettingsRef().read_tso, e.locks, bypass_lock_ts);
                     if (!bypass_lock_ts.empty())
                     {
                         context.getDAGContext()->getBypassLockTs().insert(bypass_lock_ts.begin(), bypass_lock_ts.end());
