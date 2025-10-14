@@ -921,7 +921,7 @@ LearnerReadSnapshot DAGStorageInterpreter::doBatchCopLearnerRead()
                     std::vector<uint64_t> bypass_lock_ts;
                     auto * cluster = context.getTMTContext().getKVCluster();
                     cluster->lock_resolver
-                        ->getBypassLockTs(bo, context.getSettingsRef().read_tso, e.locks, bypass_lock_ts);
+                        ->tryGetBypassLock(bo, context.getSettingsRef().read_tso, e.locks, bypass_lock_ts);
                     if (!bypass_lock_ts.empty())
                     {
                         context.getDAGContext()->getBypassLockTs().insert(bypass_lock_ts.begin(), bypass_lock_ts.end());
