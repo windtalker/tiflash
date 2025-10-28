@@ -60,6 +60,7 @@
 #include <TiDB/Schema/TiDBSchemaManager.h>
 #include <common/logger_useful.h>
 #include <kvproto/coprocessor.pb.h>
+#include <pingcap/kv/Backoff.h>
 #include <tipb/select.pb.h>
 
 #include <cassert>
@@ -917,7 +918,7 @@ LearnerReadSnapshot DAGStorageInterpreter::doBatchCopLearnerRead()
                     // only try bypass locks once
                     should_try_bypass_locks = false;
                     // Try to bypass locks.
-                    pingcap::kv::Backoffer bo(pingcap::kv::copNextMaxBackoff);
+                    pingcap::kv::Backoffer bo(pingcap::kv::bgResolveLockMaxBackoff);
                     std::vector<uint64_t> bypass_lock_ts;
                     auto * cluster = context.getTMTContext().getKVCluster();
                     cluster->lock_resolver
