@@ -78,6 +78,11 @@ NamesAndTypes genNamesAndTypes(const TiDB::ColumnInfos & column_infos, const Str
                 MutableSupport::extra_table_id_column_name,
                 MutableSupport::extra_table_id_column_type);
             break;
+        case TiDBCommitTSColumnID:
+            names_and_types.emplace_back(
+                MutableSupport::version_column_name,
+                getDataTypeByColumnInfoForComputingLayer(column_info));
+            break;
         default:
             names_and_types.emplace_back(
                 column_info.name.empty() ? fmt::format("{}_{}", column_prefix, i) : column_info.name,
@@ -111,6 +116,12 @@ std::tuple<DM::ColumnDefinesPtr, int> genColumnDefinesForDisaggregatedRead(const
                 TiDBPkColumnID,
                 output_name, // MutableSupport::tidb_pk_column_name
                 getPkType(column_info)});
+            break;
+        case TiDBCommitTSColumnID:
+            column_defines->emplace_back(DM::ColumnDefine{
+                VersionColumnID,
+                output_name, // MutableSupport::version_column_name
+                MutableSupport::version_column_type});
             break;
         case ExtraTableIDColumnID:
         {

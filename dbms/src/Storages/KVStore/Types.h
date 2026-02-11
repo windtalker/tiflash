@@ -60,6 +60,9 @@ enum : IndexID
 // Constants for column id, prevent conflict with TiDB.
 static constexpr ColumnID TiDBPkColumnID = -1;
 static constexpr ColumnID ExtraTableIDColumnID = -3;
+/// A hidden column requested by TiDB in TableScan, which means reading the commit_ts.
+/// In TiFlash storage layer it is stored in `_INTERNAL_VERSION` (VersionColumnID).
+static constexpr ColumnID TiDBCommitTSColumnID = -5;
 static constexpr ColumnID VersionColumnID = -1024;
 static constexpr ColumnID DelMarkColumnID = -1025;
 static constexpr ColumnID InvalidColumnID = -10000;
