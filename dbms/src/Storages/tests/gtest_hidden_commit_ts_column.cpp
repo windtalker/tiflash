@@ -1,10 +1,13 @@
 #include <Flash/Coprocessor/DAGCodec.h>
 #include <Flash/Coprocessor/DAGExpressionAnalyzer.h>
+#include <Flash/Coprocessor/DAGQueryInfo.h>
+#include <Flash/Coprocessor/DAGUtils.h>
 #include <Functions/registerFunctions.h>
 #include <Interpreters/Context.h>
 #include <IO/Buffer/WriteBufferFromString.h>
 #include <Storages/DeltaMerge/DeltaMergeDefines.h>
 #include <Storages/DeltaMerge/Filter/PushDownFilter.h>
+#include <Storages/DeltaMerge/Filter/RSOperator.h>
 #include <TestUtils/FunctionTestUtils.h>
 #include <TestUtils/TiFlashTestBasic.h>
 #include <TiDB/Decode/TypeMapping.h>
@@ -150,6 +153,69 @@ try
     const auto expected_type = getDataTypeByColumnInfoForComputingLayer(commit_ts_ci);
     ASSERT_TRUE(block.has(VERSION_COLUMN_NAME));
     EXPECT_EQ(block.getByName(VERSION_COLUMN_NAME).type->getName(), expected_type->getName());
+}
+CATCH
+
+TEST_F(HiddenCommitTSColumnTest, RoughSetFilterAliasCommitTS)
+try
+{
+    // Rough set filter (RSOperator) uses table_column_defines by ColumnID.
+    // TiDB requests commit_ts as ColumnID=-5, but in TiFlash it is stored in `_INTERNAL_VERSION` (VersionColumnID).
+    // Ensure rough set filter can correctly map ColumnID=-5 to VersionColumnID.
+
+    TiDB::ColumnInfo commit_ts_ci;
+    commit_ts_ci.id = TiDBCommitTSColumnID;
+    commit_ts_ci.name = "commit_ts";
+    commit_ts_ci.tp = TiDB::TypeLongLong; // Int64
+    commit_ts_ci.flag = 0; // Nullable
+    TiDB::ColumnInfos scan_column_infos{commit_ts_ci};
+
+    google::protobuf::RepeatedPtrField<tipb::Expr> filters;
+    {
+        tipb::Expr col_ref;
+        col_ref.set_tp(tipb::ExprType::ColumnRef);
+        {
+            WriteBufferFromOwnString ss;
+            encodeDAGInt64(/*column_index=*/0, ss);
+            col_ref.set_val(ss.releaseStr());
+        }
+        auto * field_type = col_ref.mutable_field_type();
+        field_type->set_tp(TiDB::TypeLongLong);
+        field_type->set_flag(0); // Nullable
+        field_type->set_flen(0);
+        field_type->set_decimal(0);
+
+        tipb::Expr literal = constructInt64LiteralTiExpr(10);
+
+        auto * func = filters.Add();
+        func->set_tp(tipb::ExprType::ScalarFunc);
+        func->set_sig(tipb::ScalarFuncSig::GTInt);
+        *func->add_children() = col_ref;
+        *func->add_children() = literal;
+    }
+
+    tipb::ANNQueryInfo ann_query_info;
+    google::protobuf::RepeatedPtrField<tipb::Expr> pushed_down_filters;
+    std::vector<int> runtime_filter_ids;
+    const int rf_max_wait_time_ms = 0;
+    auto dag_query = std::make_unique<DAGQueryInfo>(
+        filters,
+        ann_query_info,
+        pushed_down_filters,
+        scan_column_infos,
+        runtime_filter_ids,
+        rf_max_wait_time_ms,
+        ctx->getTimezoneInfo());
+
+    DM::ColumnDefines table_column_defines;
+    table_column_defines.emplace_back(VERSION_COLUMN_ID, VERSION_COLUMN_NAME, VERSION_COLUMN_TYPE);
+
+    auto rs_operator = DM::RSOperator::build(dag_query, scan_column_infos, table_column_defines, /*enable_rs_filter*/ true, log);
+    ASSERT_TRUE(rs_operator);
+
+    const auto col_ids = rs_operator->getColumnIDs();
+    ASSERT_EQ(col_ids.size(), 1);
+    EXPECT_EQ(col_ids[0], VERSION_COLUMN_ID);
 }
 CATCH
 
