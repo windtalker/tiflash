@@ -7,6 +7,7 @@
   `env CCACHE_DIR=$HOME/.codex/memories/ccache CCACHE_TEMPDIR=/tmp/ccache-tmp cmake --build cmake-build-debug --target gtests_dbms --parallel 16`
 - Reuse the same `CCACHE_DIR` for later incremental `gtests_dbms` builds.
 - After modifying any C++ source that is linked into `gtests_dbms`, always rebuild `gtests_dbms` before running tests. Running `./cmake-build-debug/dbms/gtests_dbms` directly does not pick up source edits until the binary is rebuilt.
+- After modifying C++ source or header files, run `clang-format -style=file` on the touched files and make sure no formatting diff remains before handing off the change. Prefer the `clang-format` available in the current toolchain or on `PATH`; avoid hardcoding a machine-specific binary path in workflow notes.
 - After adding a new `gtest*.cpp` or `bench*.cpp` source file, run `cmake -S . -B cmake-build-debug` once before rebuilding. The test targets collect sources through CMake globbing, and a plain `cmake --build` may miss the new file until CMake is regenerated.
 - After modifying proto files under `contrib/tipb/proto/*.proto` or `contrib/kvproto/proto/*.proto`, regenerate the Go bindings in the corresponding submodule; changing the proto alone is not enough.
 - For `tipb`, prefer:
