@@ -159,6 +159,11 @@ public:
         const String & new_database_name,
         const String & new_table_name);
 
+    void mviewRefreshOutOfPlaceCutover(
+        const String & database_name,
+        const String & old_table_name,
+        const String & shadow_table_name);
+
     void renameTables(const std::vector<std::tuple<std::string, std::string, std::string>> & table_name_map);
 
     void truncateTable(const String & database_name, const String & table_name);

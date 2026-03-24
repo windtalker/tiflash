@@ -344,6 +344,45 @@ try
 }
 CATCH
 
+TEST_F(SchemaSyncTest, MViewRefreshOutOfPlaceCutover)
+try
+{
+    auto pd_client = global_ctx.getTMTContext().getPDClient();
+
+    const String db_name = "mock_db";
+    const String mv_name = "mv_t";
+    const String shadow_name = "mv_t_shadow";
+    MockTiDB::instance().newDataBase(db_name);
+
+    auto cols = ColumnsDescription({
+        {"col1", typeFromString("String")},
+        {"col2", typeFromString("Int64")},
+    });
+    const auto old_mv_id = MockTiDB::instance().newTable(db_name, mv_name, cols, pd_client->getTS(), "");
+    const auto shadow_table_id = MockTiDB::instance().newTable(db_name, shadow_name, cols, pd_client->getTS(), "");
+
+    refreshSchema();
+    refreshTableSchema(old_mv_id);
+    refreshTableSchema(shadow_table_id);
+
+    ASSERT_EQ(mustGetSyncedTable(old_mv_id)->getTableInfo().name, mv_name);
+    ASSERT_EQ(mustGetSyncedTable(shadow_table_id)->getTableInfo().name, shadow_name);
+    ASSERT_FALSE(mustGetSyncedTable(old_mv_id)->isTombstone());
+    ASSERT_FALSE(mustGetSyncedTable(shadow_table_id)->isTombstone());
+
+    MockTiDB::instance().mviewRefreshOutOfPlaceCutover(db_name, mv_name, shadow_name);
+    refreshSchema();
+
+    auto new_mv_storage = mustGetSyncedTable(shadow_table_id);
+    ASSERT_EQ(new_mv_storage->getTableInfo().name, mv_name);
+    ASSERT_FALSE(new_mv_storage->isTombstone());
+
+    auto old_mv_storage = mustGetSyncedTable(old_mv_id);
+    ASSERT_TRUE(old_mv_storage->isTombstone());
+    ASSERT_EQ(old_mv_storage->getTableInfo().name, mv_name);
+}
+CATCH
+
 TEST_F(SchemaSyncTest, PhysicalDropTable)
 try
 {

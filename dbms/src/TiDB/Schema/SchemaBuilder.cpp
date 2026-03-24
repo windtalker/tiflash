@@ -314,8 +314,9 @@ void SchemaBuilder<Getter, NameMapper>::applyDiff(const SchemaDiff & diff)
     }
     case SchemaActionType::ActionMViewRefreshOutOfPlaceCutover:
     {
-        // Cutover keeps the shadow table ID, updates its display metadata to the logical MV name,
-        // and removes the old MV table ID in the same schema version.
+        // Cutover transfers the logical MV name and metadata to the shadow table ID
+        // while the old MV table ID is dropped. If the shadow storage has already
+        // been created in TiFlash, rename it to the latest table info first.
         applyRenameTable(diff.schema_id, diff.table_id);
         applyDropTable(diff.schema_id, diff.old_table_id, magic_enum::enum_name(diff.type));
         break;
