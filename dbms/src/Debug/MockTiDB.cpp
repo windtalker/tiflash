@@ -829,6 +829,54 @@ void MockTiDB::renameTableTo(
     version_diff[version] = diff;
 }
 
+void MockTiDB::mviewRefreshOutOfPlaceCutover(
+    const String & database_name,
+    const String & old_table_name,
+    const String & shadow_table_name)
+{
+    std::scoped_lock lock(tables_mutex);
+
+    TablePtr old_table = getTableByNameInternal(database_name, old_table_name);
+    TablePtr shadow_table = getTableByNameInternal(database_name, shadow_table_name);
+
+    RUNTIME_CHECK_MSG(
+        old_table->database_id == shadow_table->database_id,
+        "mviewRefreshOutOfPlaceCutover requires tables from the same database, old_database_id={} "
+        "shadow_database_id={}",
+        old_table->database_id,
+        shadow_table->database_id);
+    RUNTIME_CHECK_MSG(
+        old_table->id() != shadow_table->id(),
+        "mviewRefreshOutOfPlaceCutover requires different table IDs, table_id={}",
+        old_table->id());
+
+    const auto old_table_id = old_table->id();
+    const auto shadow_table_id = shadow_table->id();
+    const auto database_id = old_table->database_id;
+    const String old_qualified_name = database_name + "." + old_table_name;
+    const String shadow_qualified_name = database_name + "." + shadow_table_name;
+
+    TableInfo new_shadow_table_info = shadow_table->table_info;
+    new_shadow_table_info.name = old_table_name;
+    auto new_shadow_table
+        = std::make_shared<Table>(database_name, database_id, old_table_name, std::move(new_shadow_table_info));
+
+    tables_by_id.erase(old_table_id);
+    tables_by_id[shadow_table_id] = new_shadow_table;
+    tables_by_name.erase(old_qualified_name);
+    tables_by_name.erase(shadow_qualified_name);
+    tables_by_name.emplace(old_qualified_name, new_shadow_table);
+
+    version++;
+    SchemaDiff diff;
+    diff.type = SchemaActionType::ActionMViewRefreshOutOfPlaceCutover;
+    diff.schema_id = database_id;
+    diff.table_id = shadow_table_id;
+    diff.old_table_id = old_table_id;
+    diff.version = version;
+    version_diff[version] = diff;
+}
+
 void MockTiDB::renameTables(const std::vector<std::tuple<std::string, std::string, std::string>> & table_name_map)
 {
     std::scoped_lock lock(tables_mutex);

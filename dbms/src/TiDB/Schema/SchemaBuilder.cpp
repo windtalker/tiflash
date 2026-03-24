@@ -311,6 +311,15 @@ void SchemaBuilder<Getter, NameMapper>::applyDiff(const SchemaDiff & diff)
         // No schema update is needed for TiFlash local storage.
         break;
     }
+    case SchemaActionType::ActionMViewRefreshOutOfPlaceCutover:
+    {
+        // Cutover transfers the logical MV name and metadata to the shadow table ID
+        // while the old MV table ID is dropped. If the shadow storage has already
+        // been created in TiFlash, rename it to the latest table info first.
+        applyRenameTable(diff.schema_id, diff.table_id);
+        applyDropTable(diff.schema_id, diff.old_table_id, magic_enum::enum_name(diff.type));
+        break;
+    }
     case SchemaActionType::RecoverTable:
     {
         applyRecoverTable(diff.schema_id, diff.table_id);
