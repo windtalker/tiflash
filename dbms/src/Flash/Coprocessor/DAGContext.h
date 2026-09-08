@@ -72,8 +72,31 @@ struct JoinProfileInfo
     UInt64 peak_build_bytes_usage = 0;
     bool is_spill_enabled = false;
     bool is_spilled = false;
-    /// Statistics for this physical join. The execution summary keeps one value per executor ID.
+    /// Empty only for a cross join, which does not have a hash table.
     std::optional<HashTableStats> hash_table_stats;
+
+    void setHashTableStats(const HashTableStats & stats)
+    {
+        std::lock_guard lock(hash_table_stats_mutex);
+        hash_table_stats = stats;
+    }
+
+    void mergeHashTableStats(const HashTableStats & stats)
+    {
+        std::lock_guard lock(hash_table_stats_mutex);
+        if (!hash_table_stats)
+            hash_table_stats.emplace();
+        hash_table_stats->merge(stats);
+    }
+
+    std::optional<HashTableStats> getHashTableStats() const
+    {
+        std::lock_guard lock(hash_table_stats_mutex);
+        return hash_table_stats;
+    }
+
+private:
+    mutable std::mutex hash_table_stats_mutex;
 };
 using JoinProfileInfoPtr = std::shared_ptr<JoinProfileInfo>;
 struct JoinExecuteInfo

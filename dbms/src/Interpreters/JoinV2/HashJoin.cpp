@@ -486,7 +486,7 @@ void HashJoin::workAfterBuildRowFinish()
         hash_table_stats.bytes = pointer_table.getMemoryUsage();
         for (const auto & container : multi_row_containers)
             hash_table_stats.bytes += container->memoryUsage();
-        profile_info->hash_table_stats = hash_table_stats;
+        profile_info->setHashTableStats(hash_table_stats);
     }
 
     /// Conservative threshold: trigger late materialization when lm_row_size average >= 16 bytes.

@@ -235,7 +235,8 @@ public:
     /// The peak build bytes usage, if spill is not enabled, the same as getTotalByteCount
     size_t getPeakBuildBytesUsage();
 
-    /// Get the number of distinct hash entries and bytes currently stored in the hash table.
+    /// Get the number of distinct hash entries and bytes currently stored in the in-memory hash tables.
+    /// Partitions already spilled to disk are not included.
     bool getHashTableStats(UInt64 & ndv, UInt64 & bytes) const;
 
     void checkAndMarkPartitionSpilledIfNeeded(size_t stream_index);
@@ -336,7 +337,10 @@ public:
     // used to name the column that records matched map entry before other conditions filter
     const String flag_mapped_entry_helper_name;
 
-    const JoinProfileInfoPtr profile_info = std::make_shared<JoinProfileInfo>();
+    JoinProfileInfoPtr profile_info = std::make_shared<JoinProfileInfo>();
+    /// A restore join shares profile_info with its parent. Keep this flag per Join object so every
+    /// completed restore hash table is merged exactly once.
+    bool hash_table_stats_finalized = false;
     HashJoinSpillContextPtr hash_join_spill_context;
     const Block & getOutputBlock() const { return finalized ? output_block_after_finalize : output_block; }
     const Names & getRequiredColumns() const { return required_columns; }

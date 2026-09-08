@@ -47,7 +47,7 @@ void JoinStatistics::collectExtraRuntimeDetail()
         build_side_child = join_execute_info.build_side_root_executor_id;
         is_spill_enabled = join_execute_info.join_profile_info->is_spill_enabled;
         is_spilled = join_execute_info.join_profile_info->is_spilled;
-        hash_table_stats = join_execute_info.join_profile_info->hash_table_stats;
+        hash_table_stats = join_execute_info.join_profile_info->getHashTableStats();
         switch (dag_context.getExecutionMode())
         {
         case ExecutionMode::None:

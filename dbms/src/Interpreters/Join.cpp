@@ -264,7 +264,7 @@ size_t Join::getTotalHashTableAndPoolByteCount()
 
 bool Join::getHashTableStats(UInt64 & ndv, UInt64 & bytes) const
 {
-    if (isCrossJoin(kind) || isSpilled())
+    if (isCrossJoin(kind))
         return false;
 
     std::shared_lock rw_lock(rwlock);
@@ -272,6 +272,10 @@ bool Join::getHashTableStats(UInt64 & ndv, UInt64 & bytes) const
     size_t total_bytes = 0;
     for (const auto & partition : partitions)
     {
+        /// A spilled partition has released its in-memory hash table. Its data will be counted by the
+        /// restore Join after the partition is rebuilt successfully.
+        if (partition->isSpill())
+            continue;
         auto partition_lock = partition->lockPartition();
         total_ndv += partition->getRowCount();
         total_bytes += partition->getHashMapAndPoolByteCount();
@@ -407,6 +411,7 @@ std::shared_ptr<Join> Join::createRestoreJoin(size_t max_bytes_before_external_j
     ret->output_column_names_set_after_finalize = output_column_names_set_after_finalize;
     ret->output_columns_names_set_for_other_condition_after_finalize
         = output_columns_names_set_for_other_condition_after_finalize;
+    ret->profile_info = profile_info;
     ret->required_columns = required_columns;
     ret->output_block_after_finalize = output_block_after_finalize;
     ret->finalized = true;
@@ -1905,21 +1910,31 @@ void Join::finalizeCrossJoinBuild()
 
 void Join::finalizeProfileInfo()
 {
-    profile_info->is_spill_enabled = isEnableSpill();
-    profile_info->is_spilled = isSpilled();
-    profile_info->peak_build_bytes_usage = getPeakBuildBytesUsage();
+    if (!isRestoreJoin())
+    {
+        profile_info->is_spill_enabled = isEnableSpill();
+        profile_info->is_spilled = isSpilled();
+        profile_info->peak_build_bytes_usage = getPeakBuildBytesUsage();
+    }
     finalizeHashTableStats();
 }
 
 void Join::finalizeHashTableStats()
 {
-    if (profile_info->hash_table_stats)
+    if (hash_table_stats_finalized)
         return;
 
     UInt64 ndv = 0;
     UInt64 bytes = 0;
-    if (getHashTableStats(ndv, bytes))
-        profile_info->hash_table_stats = HashTableStats{.ndv = ndv, .bytes = bytes};
+    if (!getHashTableStats(ndv, bytes))
+        return;
+
+    const HashTableStats stats{.ndv = ndv, .bytes = bytes};
+    if (isRestoreJoin())
+        profile_info->mergeHashTableStats(stats);
+    else
+        profile_info->setHashTableStats(stats);
+    hash_table_stats_finalized = true;
 }
 
 void Join::workAfterProbeFinish(size_t stream_index)
