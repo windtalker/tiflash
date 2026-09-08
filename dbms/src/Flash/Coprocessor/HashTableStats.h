@@ -14,23 +14,31 @@
 
 #pragma once
 
+#include <Common/Exception.h>
 #include <common/types.h>
 
 namespace DB
 {
+enum class HashTableSizeKind : UInt8
+{
+    DistinctKeyCount,
+    BuildRowCount,
+};
+
 /// Statistics for one hash table owned by a physical hash-table operator.
 struct HashTableStats
 {
-    /// The protocol field is named `ndv`, but its executor-specific meaning is intentionally different:
     /// Join V1 reports distinct hash entries, while Join V2 reports build-side row count because its
     /// pointer table does not maintain a distinct-key count. This is the current by-design behavior.
-    UInt64 ndv = 0;
-    UInt64 bytes = 0;
+    UInt64 size = 0;
+    HashTableSizeKind size_kind = HashTableSizeKind::DistinctKeyCount;
+    UInt64 memory_bytes = 0;
 
     void merge(const HashTableStats & other)
     {
-        ndv += other.ndv;
-        bytes += other.bytes;
+        RUNTIME_CHECK(size_kind == other.size_kind);
+        size += other.size;
+        memory_bytes += other.memory_bytes;
     }
 };
 } // namespace DB

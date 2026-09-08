@@ -482,12 +482,12 @@ void HashJoin::workAfterBuildRowFinish()
     if (method != HashJoinKeyMethod::Cross)
     {
         HashTableStats hash_table_stats;
-        /// By design, V2 reports build-side rows in the protocol `ndv` field: the pointer table does
-        /// not track distinct hash keys.
-        hash_table_stats.ndv = all_build_row_count;
-        hash_table_stats.bytes = pointer_table.getMemoryUsage();
+        /// V2 reports build-side rows because the pointer table does not track distinct hash keys.
+        hash_table_stats.size = all_build_row_count;
+        hash_table_stats.size_kind = HashTableSizeKind::BuildRowCount;
+        hash_table_stats.memory_bytes = pointer_table.getMemoryUsage();
         for (const auto & container : multi_row_containers)
-            hash_table_stats.bytes += container->memoryUsage();
+            hash_table_stats.memory_bytes += container->memoryUsage();
         profile_info->setHashTableStats(hash_table_stats);
     }
 

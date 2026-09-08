@@ -89,8 +89,12 @@ public:
         }
         ASSERT_NE(join_summary, nullptr);
         ASSERT_TRUE(join_summary->has_tiflash_hash_table_stats());
-        ASSERT_EQ(join_summary->tiflash_hash_table_stats().ndv(), enable_join_v2 ? 8 : 1);
-        ASSERT_GT(join_summary->tiflash_hash_table_stats().bytes(), 0);
+        ASSERT_EQ(join_summary->tiflash_hash_table_stats().size(), enable_join_v2 ? 8 : 1);
+        ASSERT_EQ(
+            join_summary->tiflash_hash_table_stats().size_kind(),
+            enable_join_v2 ? tipb::TIFLASH_HASH_TABLE_SIZE_KIND_BUILD_ROW_COUNT
+                           : tipb::TIFLASH_HASH_TABLE_SIZE_KIND_DISTINCT_KEY_COUNT);
+        ASSERT_GT(join_summary->tiflash_hash_table_stats().memory_bytes(), 0);
     }
 
     void testHashTableStatsForMultipleJoins(bool enable_join_v2)
@@ -135,8 +139,12 @@ public:
             }
             ASSERT_NE(join_summary, nullptr);
             ASSERT_TRUE(join_summary->has_tiflash_hash_table_stats());
-            ASSERT_EQ(join_summary->tiflash_hash_table_stats().ndv(), enable_join_v2 ? 8 : 1);
-            ASSERT_GT(join_summary->tiflash_hash_table_stats().bytes(), 0);
+            ASSERT_EQ(join_summary->tiflash_hash_table_stats().size(), enable_join_v2 ? 8 : 1);
+            ASSERT_EQ(
+                join_summary->tiflash_hash_table_stats().size_kind(),
+                enable_join_v2 ? tipb::TIFLASH_HASH_TABLE_SIZE_KIND_BUILD_ROW_COUNT
+                               : tipb::TIFLASH_HASH_TABLE_SIZE_KIND_DISTINCT_KEY_COUNT);
+            ASSERT_GT(join_summary->tiflash_hash_table_stats().memory_bytes(), 0);
         }
     }
 

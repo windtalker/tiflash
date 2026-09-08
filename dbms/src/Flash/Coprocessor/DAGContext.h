@@ -85,8 +85,9 @@ struct JoinProfileInfo
     {
         std::lock_guard lock(hash_table_stats_mutex);
         if (!hash_table_stats)
-            hash_table_stats.emplace();
-        hash_table_stats->merge(stats);
+            hash_table_stats = stats;
+        else
+            hash_table_stats->merge(stats);
     }
 
     std::optional<HashTableStats> getHashTableStats() const

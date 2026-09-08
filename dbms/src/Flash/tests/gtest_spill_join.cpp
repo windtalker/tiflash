@@ -268,8 +268,9 @@ try
     ASSERT_TRUE(join_execute_info.join_profile_info->is_spilled);
     const auto hash_table_stats = join_execute_info.join_profile_info->getHashTableStats();
     ASSERT_TRUE(hash_table_stats.has_value());
-    ASSERT_EQ(hash_table_stats->ndv, 10);
-    ASSERT_GT(hash_table_stats->bytes, 0);
+    ASSERT_EQ(hash_table_stats->size, 10);
+    ASSERT_EQ(hash_table_stats->size_kind, HashTableSizeKind::DistinctKeyCount);
+    ASSERT_GT(hash_table_stats->memory_bytes, 0);
 }
 CATCH
 

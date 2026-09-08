@@ -262,14 +262,14 @@ size_t Join::getTotalHashTableAndPoolByteCount()
     return res;
 }
 
-bool Join::getHashTableStats(UInt64 & ndv, UInt64 & bytes) const
+bool Join::getHashTableStats(UInt64 & size, UInt64 & memory_bytes) const
 {
     if (isCrossJoin(kind))
         return false;
 
     std::shared_lock rw_lock(rwlock);
-    size_t total_ndv = 0;
-    size_t total_bytes = 0;
+    size_t total_size = 0;
+    size_t total_memory_bytes = 0;
     for (const auto & partition : partitions)
     {
         /// A spilled partition has released its in-memory hash table. Its data will be counted by the
@@ -277,12 +277,12 @@ bool Join::getHashTableStats(UInt64 & ndv, UInt64 & bytes) const
         if (partition->isSpill())
             continue;
         auto partition_lock = partition->lockPartition();
-        /// Join V1 maps one entry to each distinct join key, so this is the V1 `ndv` by design.
-        total_ndv += partition->getRowCount();
-        total_bytes += partition->getHashMapAndPoolByteCount();
+        /// Join V1 maps one entry to each distinct join key.
+        total_size += partition->getRowCount();
+        total_memory_bytes += partition->getHashMapAndPoolByteCount();
     }
-    ndv = total_ndv;
-    bytes = total_bytes;
+    size = total_size;
+    memory_bytes = total_memory_bytes;
     return true;
 }
 
@@ -1922,12 +1922,15 @@ void Join::finalizeHashTableStats()
     if (hash_table_stats_finalized)
         return;
 
-    UInt64 ndv = 0;
-    UInt64 bytes = 0;
-    if (!getHashTableStats(ndv, bytes))
+    UInt64 size = 0;
+    UInt64 memory_bytes = 0;
+    if (!getHashTableStats(size, memory_bytes))
         return;
 
-    const HashTableStats stats{.ndv = ndv, .bytes = bytes};
+    const HashTableStats stats{
+        .size = size,
+        .size_kind = HashTableSizeKind::DistinctKeyCount,
+        .memory_bytes = memory_bytes};
     profile_info->setHashTableStats(stats);
     if (isRestoreJoin())
         hash_table_stats_profile_info->mergeHashTableStats(stats);

@@ -21,6 +21,31 @@
 
 namespace DB
 {
+namespace
+{
+HashTableSizeKind toHashTableSizeKind(tipb::TiFlashHashTableSizeKind size_kind)
+{
+    switch (size_kind)
+    {
+    case tipb::TIFLASH_HASH_TABLE_SIZE_KIND_DISTINCT_KEY_COUNT:
+        return HashTableSizeKind::DistinctKeyCount;
+    case tipb::TIFLASH_HASH_TABLE_SIZE_KIND_BUILD_ROW_COUNT:
+        return HashTableSizeKind::BuildRowCount;
+    default:
+        throw Exception("Unknown TiFlash hash table size kind", ErrorCodes::LOGICAL_ERROR);
+    }
+}
+
+HashTableStats toHashTableStats(const tipb::TiFlashHashTableStats & stats)
+{
+    return {
+        .size = stats.size(),
+        .size_kind = toHashTableSizeKind(stats.size_kind()),
+        .memory_bytes = stats.memory_bytes(),
+    };
+}
+} // namespace
+
 ExecutionSummary::ExecutionSummary()
     : scan_context(std::make_shared<DM::ScanContext>())
 {}
@@ -76,10 +101,11 @@ void ExecutionSummary::merge(const tipb::ExecutorExecutionSummary & other)
     inter_zone_receive_bytes += other.tiflash_network_summary().inter_zone_receive_bytes();
     if (other.has_tiflash_hash_table_stats())
     {
+        const auto other_hash_table_stats = toHashTableStats(other.tiflash_hash_table_stats());
         if (!hash_table_stats)
-            hash_table_stats.emplace();
-        hash_table_stats->ndv += other.tiflash_hash_table_stats().ndv();
-        hash_table_stats->bytes += other.tiflash_hash_table_stats().bytes();
+            hash_table_stats = other_hash_table_stats;
+        else
+            hash_table_stats->merge(other_hash_table_stats);
     }
     ru_consumption = mergeRUConsumption(ru_consumption, parseRUConsumption(other));
     if (other.has_tiflash_scan_context())
@@ -121,11 +147,7 @@ void ExecutionSummary::init(const tipb::ExecutorExecutionSummary & other)
     inter_zone_send_bytes = other.tiflash_network_summary().inter_zone_send_bytes();
     inter_zone_receive_bytes = other.tiflash_network_summary().inter_zone_receive_bytes();
     if (other.has_tiflash_hash_table_stats())
-    {
-        hash_table_stats = HashTableStats{
-            .ndv = other.tiflash_hash_table_stats().ndv(),
-            .bytes = other.tiflash_hash_table_stats().bytes()};
-    }
+        hash_table_stats = toHashTableStats(other.tiflash_hash_table_stats());
     ru_consumption = parseRUConsumption(other);
     if (other.has_tiflash_scan_context())
         scan_context->deserialize(other.tiflash_scan_context());

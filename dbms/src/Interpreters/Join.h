@@ -235,9 +235,9 @@ public:
     /// The peak build bytes usage, if spill is not enabled, the same as getTotalByteCount
     size_t getPeakBuildBytesUsage();
 
-    /// Get the number of distinct hash entries and bytes currently stored in the in-memory hash tables.
+    /// Get the number of distinct hash entries and memory bytes currently stored in the in-memory hash tables.
     /// Partitions already spilled to disk are not included.
-    bool getHashTableStats(UInt64 & ndv, UInt64 & bytes) const;
+    bool getHashTableStats(UInt64 & size, UInt64 & memory_bytes) const;
 
     void checkAndMarkPartitionSpilledIfNeeded(size_t stream_index);
 
