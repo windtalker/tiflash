@@ -78,7 +78,7 @@ void ExecutionSummary::merge(const tipb::ExecutorExecutionSummary & other)
     {
         if (!hash_table_stats)
             hash_table_stats.emplace();
-        hash_table_stats->row_count += other.tiflash_hash_table_stats().ndv();
+        hash_table_stats->ndv += other.tiflash_hash_table_stats().ndv();
         hash_table_stats->bytes += other.tiflash_hash_table_stats().bytes();
     }
     ru_consumption = mergeRUConsumption(ru_consumption, parseRUConsumption(other));
@@ -123,7 +123,7 @@ void ExecutionSummary::init(const tipb::ExecutorExecutionSummary & other)
     if (other.has_tiflash_hash_table_stats())
     {
         hash_table_stats = HashTableStats{
-            .row_count = other.tiflash_hash_table_stats().ndv(),
+            .ndv = other.tiflash_hash_table_stats().ndv(),
             .bytes = other.tiflash_hash_table_stats().bytes()};
     }
     ru_consumption = parseRUConsumption(other);

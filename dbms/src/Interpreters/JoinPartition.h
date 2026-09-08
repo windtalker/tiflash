@@ -115,9 +115,7 @@ public:
     void insertBlockForBuild(Block && block);
     void insertBlockForProbe(Block && block);
     size_t getRowCount();
-    size_t getHashTableRowCount() const { return hash_table_row_count; }
     size_t getHashMapAndPoolByteCount() const;
-    void addHashTableRowCount(size_t count) { hash_table_row_count += count; }
     void setResizeCallbackIfNeeded();
     void updateHashMapAndPoolMemoryUsage();
     size_t getHashMapAndPoolMemoryUsage() const { return hash_table_pool_memory_usage; }
@@ -267,7 +265,6 @@ private:
     /// all writes to it is protected by lock
     std::atomic<size_t> block_data_memory_usage{0};
     std::atomic<size_t> hash_table_pool_memory_usage{0};
-    size_t hash_table_row_count = 0;
     const LoggerPtr log;
 };
 } // namespace DB

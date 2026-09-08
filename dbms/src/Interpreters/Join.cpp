@@ -262,21 +262,21 @@ size_t Join::getTotalHashTableAndPoolByteCount()
     return res;
 }
 
-bool Join::getHashTableStats(UInt64 & row_count, UInt64 & bytes) const
+bool Join::getHashTableStats(UInt64 & ndv, UInt64 & bytes) const
 {
     if (isCrossJoin(kind) || isSpilled())
         return false;
 
     std::shared_lock rw_lock(rwlock);
-    size_t total_rows = 0;
+    size_t total_ndv = 0;
     size_t total_bytes = 0;
     for (const auto & partition : partitions)
     {
         auto partition_lock = partition->lockPartition();
-        total_rows += partition->getHashTableRowCount();
+        total_ndv += partition->getRowCount();
         total_bytes += partition->getHashMapAndPoolByteCount();
     }
-    row_count = total_rows;
+    ndv = total_ndv;
     bytes = total_bytes;
     return true;
 }
@@ -1916,10 +1916,10 @@ void Join::finalizeHashTableStats()
     if (profile_info->hash_table_stats)
         return;
 
-    UInt64 row_count = 0;
+    UInt64 ndv = 0;
     UInt64 bytes = 0;
-    if (getHashTableStats(row_count, bytes))
-        profile_info->hash_table_stats = HashTableStats{.row_count = row_count, .bytes = bytes};
+    if (getHashTableStats(ndv, bytes))
+        profile_info->hash_table_stats = HashTableStats{.ndv = ndv, .bytes = bytes};
 }
 
 void Join::workAfterProbeFinish(size_t stream_index)

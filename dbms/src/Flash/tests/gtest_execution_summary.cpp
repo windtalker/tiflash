@@ -89,7 +89,7 @@ public:
         }
         ASSERT_NE(join_summary, nullptr);
         ASSERT_TRUE(join_summary->has_tiflash_hash_table_stats());
-        ASSERT_EQ(join_summary->tiflash_hash_table_stats().ndv(), 8);
+        ASSERT_EQ(join_summary->tiflash_hash_table_stats().ndv(), enable_join_v2 ? 8 : 1);
         ASSERT_GT(join_summary->tiflash_hash_table_stats().bytes(), 0);
     }
 
@@ -135,7 +135,7 @@ public:
             }
             ASSERT_NE(join_summary, nullptr);
             ASSERT_TRUE(join_summary->has_tiflash_hash_table_stats());
-            ASSERT_EQ(join_summary->tiflash_hash_table_stats().ndv(), 8);
+            ASSERT_EQ(join_summary->tiflash_hash_table_stats().ndv(), enable_join_v2 ? 8 : 1);
             ASSERT_GT(join_summary->tiflash_hash_table_stats().bytes(), 0);
         }
     }

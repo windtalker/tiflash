@@ -460,7 +460,7 @@ struct KeyGetterForType
 template <ASTTableJoin::Strictness STRICTNESS, typename Map, typename KeyGetter>
 struct Inserter
 {
-    static bool insert(
+    static void insert(
         Map & map,
         const typename Map::key_type & key,
         Block * stored_block,
@@ -473,7 +473,7 @@ struct Inserter
 template <typename Map, typename KeyGetter>
 struct Inserter<ASTTableJoin::Strictness::Any, Map, KeyGetter>
 {
-    static bool insert(
+    static void insert(
         Map & map,
         KeyGetter & key_getter,
         Block * stored_block,
@@ -489,7 +489,6 @@ struct Inserter<ASTTableJoin::Strictness::Any, Map, KeyGetter>
             if (emplace_result.isInserted())
                 new (&emplace_result.getMapped()) typename Map::mapped_type(stored_block, i);
         }
-        return emplace_result.isInserted();
     }
 };
 
@@ -497,7 +496,7 @@ template <typename Map, typename KeyGetter>
 struct Inserter<ASTTableJoin::Strictness::All, Map, KeyGetter>
 {
     using MappedType = typename Map::mapped_type;
-    static bool insert(
+    static void insert(
         Map & map,
         KeyGetter & key_getter,
         Block * stored_block,
@@ -521,7 +520,6 @@ struct Inserter<ASTTableJoin::Strictness::All, Map, KeyGetter>
             new (elem) typename Map::mapped_type(stored_block, i);
             insertRowToList(pool, &emplace_result.getMapped(), elem, cache_column_threshold);
         }
-        return true;
     }
 };
 
@@ -566,15 +564,14 @@ void NO_INLINE insertBlockIntoMapTypeCase(
             }
         }
 
-        if (Inserter<STRICTNESS, Map, KeyGetter>::insert(
-                map,
-                key_getter,
-                stored_block,
-                i,
-                pool,
-                sort_key_containers,
-                probe_cache_column_threshold))
-            join_partition.addHashTableRowCount(1);
+        Inserter<STRICTNESS, Map, KeyGetter>::insert(
+            map,
+            key_getter,
+            stored_block,
+            i,
+            pool,
+            sort_key_containers,
+            probe_cache_column_threshold);
     }
 }
 
@@ -661,15 +658,14 @@ void NO_INLINE insertBlockIntoMapsTypeCase(
     auto & current_map = (join_partition) -> getHashMap<Map>(); \
     for (auto & s_i : (segment_index))                          \
     {                                                           \
-        if (Inserter<STRICTNESS, Map, KeyGetter>::insert(       \
-                current_map,                                    \
-                key_getter,                                     \
-                stored_block,                                   \
-                s_i,                                            \
-                pool,                                           \
-                sort_key_containers,                            \
-                probe_cache_column_threshold))                  \
-            (join_partition)->addHashTableRowCount(1);          \
+        Inserter<STRICTNESS, Map, KeyGetter>::insert(            \
+            current_map,                                        \
+            key_getter,                                         \
+            stored_block,                                       \
+            s_i,                                                \
+            pool,                                               \
+            sort_key_containers,                                \
+            probe_cache_column_threshold);                      \
     }
 
 #define INSERT_TO_NOT_INSERTED_MAP                                                                      \

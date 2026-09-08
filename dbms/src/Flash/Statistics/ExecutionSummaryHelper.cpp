@@ -35,7 +35,7 @@ void fillTiExecutionSummary(
     if (current.hash_table_stats)
     {
         auto * hash_table_stats = execution_summary->mutable_tiflash_hash_table_stats();
-        hash_table_stats->set_ndv(current.hash_table_stats->row_count);
+        hash_table_stats->set_ndv(current.hash_table_stats->ndv);
         hash_table_stats->set_bytes(current.hash_table_stats->bytes);
     }
     if (current.columnar_scan_context)

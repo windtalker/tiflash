@@ -21,13 +21,14 @@ namespace DB
 /// Statistics for one hash table owned by a physical hash-table operator.
 struct HashTableStats
 {
-    /// The protocol field is named `ndv` for compatibility, but stores the number of rows in the hash table.
-    UInt64 row_count = 0;
+    /// The protocol field is named `ndv`. For Join V1 this is the number of distinct hash entries;
+    /// for Join V2 this is the number of build-side rows used to size the hash table.
+    UInt64 ndv = 0;
     UInt64 bytes = 0;
 
     void merge(const HashTableStats & other)
     {
-        row_count += other.row_count;
+        ndv += other.ndv;
         bytes += other.bytes;
     }
 };
