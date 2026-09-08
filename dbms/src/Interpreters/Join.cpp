@@ -412,7 +412,7 @@ std::shared_ptr<Join> Join::createRestoreJoin(size_t max_bytes_before_external_j
     ret->output_column_names_set_after_finalize = output_column_names_set_after_finalize;
     ret->output_columns_names_set_for_other_condition_after_finalize
         = output_columns_names_set_for_other_condition_after_finalize;
-    ret->profile_info = profile_info;
+    ret->hash_table_stats_profile_info = hash_table_stats_profile_info;
     ret->required_columns = required_columns;
     ret->output_block_after_finalize = output_block_after_finalize;
     ret->finalized = true;
@@ -1911,12 +1911,9 @@ void Join::finalizeCrossJoinBuild()
 
 void Join::finalizeProfileInfo()
 {
-    if (!isRestoreJoin())
-    {
-        profile_info->is_spill_enabled = isEnableSpill();
-        profile_info->is_spilled = isSpilled();
-        profile_info->peak_build_bytes_usage = getPeakBuildBytesUsage();
-    }
+    profile_info->is_spill_enabled = isEnableSpill();
+    profile_info->is_spilled = isSpilled();
+    profile_info->peak_build_bytes_usage = getPeakBuildBytesUsage();
     finalizeHashTableStats();
 }
 
@@ -1931,10 +1928,9 @@ void Join::finalizeHashTableStats()
         return;
 
     const HashTableStats stats{.ndv = ndv, .bytes = bytes};
+    profile_info->setHashTableStats(stats);
     if (isRestoreJoin())
-        profile_info->mergeHashTableStats(stats);
-    else
-        profile_info->setHashTableStats(stats);
+        hash_table_stats_profile_info->mergeHashTableStats(stats);
     hash_table_stats_finalized = true;
 }
 
