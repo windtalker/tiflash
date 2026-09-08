@@ -21,8 +21,9 @@ namespace DB
 /// Statistics for one hash table owned by a physical hash-table operator.
 struct HashTableStats
 {
-    /// The protocol field is named `ndv`. For Join V1 this is the number of distinct hash entries;
-    /// for Join V2 this is the number of build-side rows used to size the hash table.
+    /// The protocol field is named `ndv`, but its executor-specific meaning is intentionally different:
+    /// Join V1 reports distinct hash entries, while Join V2 reports build-side row count because its
+    /// pointer table does not maintain a distinct-key count. This is the current by-design behavior.
     UInt64 ndv = 0;
     UInt64 bytes = 0;
 

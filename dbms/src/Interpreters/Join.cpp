@@ -277,6 +277,7 @@ bool Join::getHashTableStats(UInt64 & ndv, UInt64 & bytes) const
         if (partition->isSpill())
             continue;
         auto partition_lock = partition->lockPartition();
+        /// Join V1 maps one entry to each distinct join key, so this is the V1 `ndv` by design.
         total_ndv += partition->getRowCount();
         total_bytes += partition->getHashMapAndPoolByteCount();
     }

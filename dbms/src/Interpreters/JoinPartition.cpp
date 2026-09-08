@@ -658,7 +658,7 @@ void NO_INLINE insertBlockIntoMapsTypeCase(
     auto & current_map = (join_partition) -> getHashMap<Map>(); \
     for (auto & s_i : (segment_index))                          \
     {                                                           \
-        Inserter<STRICTNESS, Map, KeyGetter>::insert(            \
+        Inserter<STRICTNESS, Map, KeyGetter>::insert(           \
             current_map,                                        \
             key_getter,                                         \
             stored_block,                                       \
