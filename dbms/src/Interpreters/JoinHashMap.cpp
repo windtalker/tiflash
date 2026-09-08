@@ -82,6 +82,9 @@ JoinMapMethod chooseJoinMapMethod(
     {
         if (all_fixed)
         {
+            /// TODO: Support narrower nullable fixed-key maps. For example, Nullable(UInt32)
+            /// needs a 1-byte null bitmap plus its 4-byte value and can use UInt64. HashAgg and
+            /// Set have the same 128/256-bit limitation, so extend all three consistently.
             constexpr auto nullable_keys128_null_map_bytes = std::tuple_size<KeysNullMap<UInt128>>::value;
             constexpr auto nullable_keys256_null_map_bytes = std::tuple_size<KeysNullMap<UInt256>>::value;
             if (keys_bytes > (std::numeric_limits<size_t>::max() - nullable_keys256_null_map_bytes))
