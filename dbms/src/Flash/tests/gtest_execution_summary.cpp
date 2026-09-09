@@ -148,6 +148,59 @@ public:
         }
     }
 
+    void testHashAggTableStats(bool enable_pipeline, bool force_two_level)
+    {
+        enablePipeline(enable_pipeline);
+        const auto old_two_level_threshold = context.context->getSettingsRef().group_by_two_level_threshold;
+        const auto old_two_level_threshold_bytes = context.context->getSettingsRef().group_by_two_level_threshold_bytes;
+        if (force_two_level)
+        {
+            context.context->setSetting("group_by_two_level_threshold", Field(static_cast<UInt64>(1)));
+            context.context->setSetting("group_by_two_level_threshold_bytes", Field(static_cast<UInt64>(1)));
+        }
+
+        auto request = context.scan("test_db", "test_table").aggregation({col("s2")}, {col("s2")}).build(context);
+        request->set_collect_execution_summaries(true);
+
+        DAGContext dag_context(*request, "test_execution_summary", concurrency);
+        ExecutorStatisticsCollector statistics_collector("test_execution_summary", true);
+        // MPP initializes the collector before queryExecute builds the physical plan.
+        // Keep the same ordering here to verify that aggregation profile lookup is
+        // deferred until execution summaries are generated.
+        statistics_collector.initialize(&dag_context);
+        executeStreams(&dag_context);
+        statistics_collector.setLocalRUConsumption(
+            RUConsumption{.cpu_ru = 0.0, .cpu_time_ns = 0, .read_ru = 0.0, .read_bytes = 0});
+        const auto summaries = statistics_collector.genExecutionSummaryResponse().execution_summaries();
+
+        // Restore the test settings before validating the result so an assertion failure
+        // cannot leak the forced two-level thresholds into subsequent test cases.
+        context.context->setSetting(
+            "group_by_two_level_threshold",
+            Field(static_cast<UInt64>(old_two_level_threshold)));
+        context.context->setSetting(
+            "group_by_two_level_threshold_bytes",
+            Field(static_cast<UInt64>(old_two_level_threshold_bytes)));
+
+        const tipb::ExecutorExecutionSummary * aggregation_summary = nullptr;
+        for (const auto & summary : summaries)
+        {
+            if (summary.has_executor_id() && summary.executor_id() == "aggregation_1")
+            {
+                aggregation_summary = &summary;
+                break;
+            }
+        }
+        ASSERT_NE(aggregation_summary, nullptr);
+        ASSERT_TRUE(aggregation_summary->has_tiflash_hash_table_stats());
+        ASSERT_EQ(
+            aggregation_summary->tiflash_hash_table_stats().size_kind(),
+            tipb::TIFLASH_HASH_TABLE_SIZE_KIND_DISTINCT_KEY_COUNT);
+        // Ten build workers own independent maps, so the reported total is not the final merged NDV.
+        ASSERT_GE(aggregation_summary->tiflash_hash_table_stats().size(), 3);
+        ASSERT_GT(aggregation_summary->tiflash_hash_table_stats().memory_bytes(), 0);
+    }
+
 #define WRAP_FOR_EXCUTION_SUMMARY_TEST_BEGIN                                      \
     std::vector<DAGRequestType> type{DAGRequestType::tree, DAGRequestType::list}; \
     std::vector<bool> pipeline_bools{false, true};                                \
@@ -256,6 +309,15 @@ try
 {
     testHashTableStatsForMultipleJoins(false);
     testHashTableStatsForMultipleJoins(true);
+}
+CATCH
+
+TEST_F(ExecutionSummaryTestRunner, hashAggTableStats)
+try
+{
+    testHashAggTableStats(false, false);
+    testHashAggTableStats(true, false);
+    testHashAggTableStats(true, true);
 }
 CATCH
 

@@ -17,6 +17,10 @@
 #include <Common/Exception.h>
 #include <common/types.h>
 
+#include <memory>
+#include <mutex>
+#include <optional>
+
 namespace DB
 {
 enum class HashTableSizeKind : UInt8
@@ -41,4 +45,29 @@ struct HashTableStats
         memory_bytes += other.memory_bytes;
     }
 };
+
+/// Thread-safe accumulator shared by all runtime fragments of one physical hash-table operator.
+class HashTableStatsProfileInfo
+{
+public:
+    void mergeHashTableStats(const HashTableStats & stats)
+    {
+        std::lock_guard lock(hash_table_stats_mutex);
+        if (!hash_table_stats)
+            hash_table_stats = stats;
+        else
+            hash_table_stats->merge(stats);
+    }
+
+    std::optional<HashTableStats> getHashTableStats() const
+    {
+        std::lock_guard lock(hash_table_stats_mutex);
+        return hash_table_stats;
+    }
+
+private:
+    mutable std::mutex hash_table_stats_mutex;
+    std::optional<HashTableStats> hash_table_stats;
+};
+using HashTableStatsProfileInfoPtr = std::shared_ptr<HashTableStatsProfileInfo>;
 } // namespace DB

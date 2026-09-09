@@ -100,6 +100,7 @@ private:
     mutable std::mutex hash_table_stats_mutex;
 };
 using JoinProfileInfoPtr = std::shared_ptr<JoinProfileInfo>;
+using AggregationProfileInfoPtr = HashTableStatsProfileInfoPtr;
 struct JoinExecuteInfo
 {
     String build_side_root_executor_id;
@@ -237,6 +238,10 @@ public:
     std::unordered_map<String, std::vector<String>> & getExecutorIdToJoinIdMap();
 
     std::unordered_map<String, JoinExecuteInfo> & getJoinExecuteInfoMap();
+
+    void addAggregationProfileInfo(const String & executor_id, const AggregationProfileInfoPtr & profile_info);
+
+    AggregationProfileInfoPtr getAggregationProfileInfo(const String & executor_id);
 
     std::unordered_map<String, BlockInputStreams> & getInBoundIOInputStreamsMap();
 
@@ -549,6 +554,8 @@ private:
     /// join_execute_info_map is a map that maps from join_probe_executor_id to JoinExecuteInfo
     /// DAGResponseWriter / JoinStatistics gets JoinExecuteInfo through it.
     std::unordered_map<std::string, JoinExecuteInfo> join_execute_info_map;
+    /// aggregation_profile_info_map maps an aggregation executor to its hash-table statistics accumulator.
+    std::unordered_map<String, AggregationProfileInfoPtr> aggregation_profile_info_map;
     /// inbound_io_input_streams_map is a map that maps from executor_id (table_scan / exchange_receiver) to BlockInputStreams.
     /// BlockInputStreams contains ExchangeReceiverInputStream, CoprocessorBlockInputStream and local_read_input_stream etc.
     std::unordered_map<String, BlockInputStreams> inbound_io_input_streams_map;
