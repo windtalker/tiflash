@@ -70,8 +70,9 @@ void ExecutionSummary::merge(const ExecutionSummary & other)
     if (other.hash_table_stats)
     {
         if (!hash_table_stats)
-            hash_table_stats.emplace();
-        hash_table_stats->merge(*other.hash_table_stats);
+            hash_table_stats = other.hash_table_stats;
+        else
+            hash_table_stats->merge(*other.hash_table_stats);
     }
     ru_consumption = mergeRUConsumption(ru_consumption, other.ru_consumption);
     scan_context->merge(*other.scan_context);

@@ -337,10 +337,9 @@ public:
     // used to name the column that records matched map entry before other conditions filter
     const String flag_mapped_entry_helper_name;
 
-    const JoinProfileInfoPtr profile_info = std::make_shared<JoinProfileInfo>();
-    /// Restore joins keep their own profile info, but contribute hash table stats to this shared
-    /// profile info after their hash table is successfully built.
-    JoinProfileInfoPtr hash_table_stats_profile_info = profile_info;
+    /// Root and restore joins of the same logical join share one profile. Only the root join updates
+    /// per-instance fields; every join contributes its final hash table stats.
+    JoinProfileInfoPtr profile_info = std::make_shared<JoinProfileInfo>();
     /// Keep this flag per Join object so every completed restore hash table is merged exactly once.
     bool hash_table_stats_finalized = false;
     HashJoinSpillContextPtr hash_join_spill_context;
