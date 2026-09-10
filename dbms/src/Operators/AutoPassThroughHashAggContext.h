@@ -50,6 +50,9 @@ struct AutoPassThroughSwitcher
 class AutoPassThroughHashAggContext
 {
 public:
+    static constexpr size_t DEF_NORMAL_UNIT_NUM = 1;
+    static constexpr size_t DEF_DYNAMIC_UNIT_NUM = 5;
+
     AutoPassThroughHashAggContext(
         const Block & child_header_,
         const Aggregator::Params & params_,
@@ -232,9 +235,6 @@ private:
 
     static constexpr size_t INIT_STATE_HASHMAP_THRESHOLD = 2 * 1024 * 1024;
     static constexpr size_t MAX_DYNAMIC_UNIT_LIMIT = 100;
-    static constexpr size_t DEF_NORMAL_UNIT_NUM = 1;
-    static constexpr size_t DEF_DYNAMIC_UNIT_NUM = 5;
-
     std::vector<AutoPassThroughColumnGenerator> column_generators;
 };
 

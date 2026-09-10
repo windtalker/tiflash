@@ -2448,7 +2448,7 @@ void Aggregator::reportHashTableStats(const ManyAggregatedDataVariants & data_va
     bool has_hash_table = false;
     for (const auto & data : data_variants)
     {
-        if (!data)
+        if (!data || !data->inited())
             continue;
 
         has_hash_table = true;
@@ -2461,7 +2461,7 @@ void Aggregator::reportHashTableStats(const ManyAggregatedDataVariants & data_va
 
 void Aggregator::reportHashTableStats(const AggregatedDataVariants & data) const
 {
-    if (!hash_table_stats_profile_info || params.keys_size == 0)
+    if (!hash_table_stats_profile_info || params.keys_size == 0 || !data.inited())
         return;
 
     hash_table_stats_profile_info->mergeHashTableStats({

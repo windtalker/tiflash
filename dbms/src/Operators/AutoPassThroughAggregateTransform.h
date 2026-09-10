@@ -40,8 +40,8 @@ public:
             [&]() { return exec_context.isCancelled(); },
             req_id_,
             row_limit_unit,
-            1,
-            5,
+            AutoPassThroughHashAggContext::DEF_NORMAL_UNIT_NUM,
+            AutoPassThroughHashAggContext::DEF_DYNAMIC_UNIT_NUM,
             hash_table_stats_profile_info);
     }
 
