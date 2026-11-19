@@ -44,7 +44,8 @@ public:
         const TiDB::ColumnInfos & scan_column_infos,
         AttrCreatorByColumnID && creator,
         const LoggerPtr & log,
-        bool enable_trim_minmax = false);
+        bool enable_trim_minmax = false,
+        bool enable_decimal_filter = true);
 
     // only for runtime filter in predicate
     static RSOperatorPtr parseRFInExpr(
